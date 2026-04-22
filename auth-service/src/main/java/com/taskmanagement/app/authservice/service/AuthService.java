@@ -1,25 +1,24 @@
 package com.taskmanagement.app.authservice.service;
 
-import com.taskmanagement.app.authservice.dto.UserRegisterResponse;
-import com.taskmanagement.app.authservice.entity.User;
+import com.taskmanagement.app.authservice.dto.AuthResponse;
+import com.taskmanagement.app.authservice.dto.RegisterRequest;
+import com.taskmanagement.app.authservice.dto.UserProfileResponse;
+import com.taskmanagement.app.authservice.exception.InvalidUserOperationException;
 import com.taskmanagement.app.authservice.exception.InvalidUserRegisterException;
-import org.springframework.stereotype.Service;
 
 import java.util.List;
 
-
 public interface AuthService {
-    User register(UserRegisterResponse user);
-    boolean validatingUserRegister(UserRegisterResponse user) throws InvalidUserRegisterException;
-    String login(String username , String password);
-    void logout(String email);
-    boolean validateToken(String token);
+    UserProfileResponse register(RegisterRequest request) throws InvalidUserRegisterException;
+    boolean validatingUserRegister(RegisterRequest request) throws InvalidUserRegisterException;
+    AuthResponse login(String username, String password);
+    void logout(String username);
     String refreshToken(String token);
-    User getUserByEmail(String email);
-    User getUserById(Integer id);
-    User updateProfile(Integer id, User user);
-    void changePassword(Integer id , String password);
-    void deactivateAccount(Integer id);
-    List<User> searchUsersByFullName(String fullName);
-    List<User> searchUsersByRole(String role);
+    UserProfileResponse getUserByEmail(String email);
+    UserProfileResponse getUserById(Long id);
+    UserProfileResponse updateProfile(Long id, RegisterRequest request);
+    String changePassword(String username, String oldPassword, String newPassword) throws InvalidUserOperationException;
+    String deactivateAccount(Long id) throws InvalidUserOperationException;
+    List<UserProfileResponse> searchUsersByFullName(String fullName);
+    List<UserProfileResponse> searchUsersByRole(String role);
 }

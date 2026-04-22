@@ -4,13 +4,12 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+@Data
 @AllArgsConstructor
 @NoArgsConstructor
-@Data
-public class UserRegisterResponse {
-    private String userName;
-    private String fullName;
-    private String email;
-    private String password;
+public class AuthResponse {
+    private String token;
+    private String username;
     private String role;
+    private String message;
 }

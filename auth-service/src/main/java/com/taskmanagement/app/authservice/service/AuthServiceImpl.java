@@ -1,7 +1,10 @@
 package com.taskmanagement.app.authservice.service;
 
-import com.taskmanagement.app.authservice.dto.UserRegisterResponse;
+import com.taskmanagement.app.authservice.dto.AuthResponse;
+import com.taskmanagement.app.authservice.dto.RegisterRequest;
+import com.taskmanagement.app.authservice.dto.UserProfileResponse;
 import com.taskmanagement.app.authservice.entity.User;
+import com.taskmanagement.app.authservice.exception.InvalidUserOperationException;
 import com.taskmanagement.app.authservice.exception.InvalidUserRegisterException;
 import com.taskmanagement.app.authservice.repository.UserRepository;
 import com.taskmanagement.app.authservice.util.JWTUtil;
@@ -14,12 +17,16 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 @Service
-public class AuthServiceImpl implements AuthService{
+public class AuthServiceImpl implements AuthService {
 
     @Autowired
     UserRepository userRepository;
+
+    @Autowired
+    BCryptPasswordEncoder encoder;
 
     @Autowired
     JWTUtil jwtUtil;
@@ -27,73 +34,81 @@ public class AuthServiceImpl implements AuthService{
     @Autowired
     AuthenticationManager authenticationManager;
 
+    @Autowired
+    BCryptPasswordEncoder passwordEncoder;
+
     @Override
-    public User register(UserRegisterResponse userResponse) {
-        try{
-            boolean isValidRegister = validatingUserRegister(userResponse);
-            BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder(12);
-            User user = new User();
-            user.setFullName(userResponse.getFullName());
-            user.setUsername(userResponse.getUserName());
-            user.setEmail(userResponse.getEmail());
-            user.setPasswordHash(passwordEncoder.encode(userResponse.getPassword()));
-            user.setRole(userResponse.getRole());
-            userRepository.save(user);
-            return user;
-        } catch (Exception e) {
-            throw new RuntimeException(e);
+    public UserProfileResponse register(RegisterRequest request) throws InvalidUserRegisterException {
+        validatingUserRegister(request);
+
+        // checking for duplicate email and username before saving the user in database
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new InvalidUserRegisterException("Email is already registered");
         }
+        if (userRepository.existsByUsername(request.getUserName())) {
+            throw new InvalidUserRegisterException("Username is already taken");
+        }
+
+        User user = new User();
+        user.setFullName(request.getFullName());
+        user.setUsername(request.getUserName());
+        user.setEmail(request.getEmail());
+        user.setPasswordHash(passwordEncoder.encode(request.getPassword())); // fixed: uses the @Bean
+        user.setRole(request.getRole().toUpperCase());
+        user.setActive(true);
+        userRepository.save(user);
+        return mapToProfile(user);
     }
 
-    public boolean validatingUserRegister(UserRegisterResponse userResponse) throws InvalidUserRegisterException {
-        if (userResponse == null) return false;
+    // This Method is checking when user register the data is valid or not
+    @Override
+    public boolean validatingUserRegister(RegisterRequest request) throws InvalidUserRegisterException {
+        if (request == null) throw new InvalidUserRegisterException("Request body cannot be null");
+
         String fullNameRegex = "^[A-Za-z ]{3,50}$";
         String emailRegex = "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$";
         String usernameRegex = "^[A-Za-z0-9_]{4,20}$";
         String passwordRegex = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]{8,20}$";
         String roleRegex = "^(USER|ADMIN)$";
-        if (userResponse.getFullName() == null || !Pattern.matches(fullNameRegex, userResponse.getFullName()))
-            throw new InvalidUserRegisterException("Invalid full name");
 
-        if (userResponse.getEmail() == null || !Pattern.matches(emailRegex, userResponse.getEmail()))
-            throw new InvalidUserRegisterException("Invalid email it should be in format like eg. abc@gmail.com");
+        if (request.getFullName() == null || !Pattern.matches(fullNameRegex, request.getFullName()))
+            throw new InvalidUserRegisterException("Invalid full name. Use 3-50 letters only.");
 
-        if (userResponse.getUserName() == null || !Pattern.matches(usernameRegex, userResponse.getUserName()))
-            throw new InvalidUserRegisterException("Invalid username");
+        if (request.getEmail() == null || !Pattern.matches(emailRegex, request.getEmail()))
+            throw new InvalidUserRegisterException("Invalid email format. Example: abc@gmail.com");
 
-        if (userResponse.getPassword() == null || !Pattern.matches(passwordRegex, userResponse.getPassword()))
-            throw new InvalidUserRegisterException("Invalid password! password should contain at-least one uppercase letter, one lowercase, one digit and one special character and length in between 8 to 20");
+        if (request.getUserName() == null || !Pattern.matches(usernameRegex, request.getUserName()))
+            throw new InvalidUserRegisterException("Invalid username. Use 4-20 alphanumeric characters or underscore.");
 
-        if (userResponse.getRole() == null || !Pattern.matches(roleRegex, userResponse.getRole().toUpperCase()))
-            throw new InvalidUserRegisterException("Invalid Role");
+        if (request.getPassword() == null || !Pattern.matches(passwordRegex, request.getPassword()))
+            throw new InvalidUserRegisterException("Weak password! Must have uppercase, lowercase, digit, special char, 8-20 chars.");
+
+        if (request.getRole() == null || !Pattern.matches(roleRegex, request.getRole().toUpperCase()))
+            throw new InvalidUserRegisterException("Invalid role. Must be USER or ADMIN.");
 
         return true;
     }
 
     @Override
-    public String login(String username, String password) {
-        try {
-            Authentication authentication = authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(username, password));
-            if (authentication.isAuthenticated()) {
-                return jwtUtil.generateToken(username);
-            }
-            else{
-                return "Login Failed! Check Credentials.";
-            }
-        } catch (Exception e) {
-            throw new RuntimeException(e);
+    public AuthResponse login(String username, String password) {
+        Authentication authentication = authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(username, password)
+        );
+        if (authentication.isAuthenticated()) {
+            User user = userRepository.findByUsername(username).orElseThrow(() -> new RuntimeException("User not found after authentication"));
+            String token = jwtUtil.generateToken(username, user.getRole());
+            return new AuthResponse(token, username, user.getRole(), "Login successful");
         }
+
+        throw new RuntimeException("Authentication failed");
     }
 
     @Override
-    public void logout(String email) {
-
+    public void logout(String username) {
+        // For stateless JWT: logout is handled client-side by discarding the token.
+        // Future: Add token to Redis blacklist here.
     }
 
-    @Override
-    public boolean validateToken(String token) {
-        return true;
-    }
 
     @Override
     public String refreshToken(String token) {
@@ -101,37 +116,75 @@ public class AuthServiceImpl implements AuthService{
     }
 
     @Override
-    public User getUserByEmail(String email) {
+    public UserProfileResponse getUserByEmail(String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found with email: " + email));
+        return mapToProfile(user);
+    }
+
+    @Override
+    public UserProfileResponse getUserById(Long id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("User not found with id: " + id));
+        return mapToProfile(user);
+    }
+
+    @Override
+    public UserProfileResponse updateProfile(Long id, RegisterRequest request) {
         return null;
     }
 
     @Override
-    public User getUserById(Integer id) {
-        return null;
+    public String changePassword(String username, String oldPassword, String newPassword) throws InvalidUserOperationException {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("User not found with username: " + username));
+        if(user.getPasswordHash().equals(encoder.encode(oldPassword))){
+            String passwordRegex = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]{8,20}$";
+            if (newPassword == null || !Pattern.matches(passwordRegex, newPassword)) {
+                throw new InvalidUserOperationException("Weak password! Must have uppercase, lowercase, digit, special char, 8-20 chars.");
+            }
+            user.setPasswordHash(encoder.encode(newPassword));
+            return "Successfully Changed the Password";
+        }
+        throw new RuntimeException("User's Old PassWord is Not Correct please try again.");
     }
 
     @Override
-    public User updateProfile(Integer id, User user) {
-        return null;
+    public String deactivateAccount(Long id) throws InvalidUserOperationException {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new InvalidUserOperationException("User not found with id: " + id));
+
+        user.setActive(false);
+        userRepository.save(user);
+        return "User account deactivated successfully";
     }
 
     @Override
-    public void changePassword(Integer id, String password) {
-
+    public List<UserProfileResponse> searchUsersByFullName(String fullName) {
+        return userRepository.searchByFullName(fullName)
+                .stream()
+                .map(this::mapToProfile)
+                .collect(Collectors.toList());
     }
 
     @Override
-    public void deactivateAccount(Integer id) {
-
+    public List<UserProfileResponse> searchUsersByRole(String role) {
+        return userRepository.findAllByRole(role)
+                .stream()
+                .map(this::mapToProfile)
+                .collect(Collectors.toList());
     }
 
-    @Override
-    public List<User> searchUsersByFullName(String fullName) {
-        return List.of();
-    }
-
-    @Override
-    public List<User> searchUsersByRole(String role) {
-        return List.of();
+    private UserProfileResponse mapToProfile(User user) {
+        UserProfileResponse response = new UserProfileResponse();
+        response.setUserId(user.getUserId());
+        response.setUsername(user.getUsername());
+        response.setFullName(user.getFullName());
+        response.setEmail(user.getEmail());
+        response.setRole(user.getRole());
+        response.setAvatarUrl(user.getAvatarUrl());
+        response.setActive(user.isActive());
+        response.setCreatedAt(user.getCreatedAt());
+        return response;
     }
 }

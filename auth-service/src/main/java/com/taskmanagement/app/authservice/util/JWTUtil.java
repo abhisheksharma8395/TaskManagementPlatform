@@ -4,55 +4,53 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 
-import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 import java.security.Key;
-import java.security.NoSuchAlgorithmException;
-import java.util.Base64;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.Objects;
+import java.util.Map;
 import java.util.function.Function;
 
 @Component
 public class JWTUtil {
 
-    private String secretKey = "";
 
-    public JWTUtil() {
-        try {
-            KeyGenerator keyGenerator = KeyGenerator.getInstance("HmacSHA256");
-            SecretKey sk = keyGenerator.generateKey();
-            secretKey = Base64.getEncoder().encodeToString(sk.getEncoded());
-        } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
-        }
-    }
+    @Value("${jwt.secret}")
+    private String secretKey;
 
-    public String generateToken(String userName){
-        HashMap<String, Objects> claims = new HashMap<>();
+    @Value("${jwt.expiration}")
+    private long expiration;
+
+    public String generateToken(String userName, String role) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("role", role);
 
         return Jwts.builder()
                 .claims()
                 .add(claims)
                 .subject(userName)
                 .issuedAt(new Date(System.currentTimeMillis()))
-                .expiration(new Date(System.currentTimeMillis() + 1000*60*60))
+                .expiration(new Date(System.currentTimeMillis() + expiration))
                 .and()
                 .signWith(getKey())
                 .compact();
     }
 
-    public Key getKey(){
+    public Key getKey() {
         byte[] keyByte = Decoders.BASE64.decode(secretKey);
         return Keys.hmacShaKeyFor(keyByte);
     }
 
     public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
+    }
+
+    public String extractRole(String token) {                       // added: extract role claim from token
+        return extractClaim(token, claims -> claims.get("role", String.class));
     }
 
     public Date extractExpiration(String token) {
@@ -78,8 +76,6 @@ public class JWTUtil {
 
     public boolean validateToken(String token, UserDetails userDetails) {
         final String username = extractUsername(token);
-
-        return username.equals(userDetails.getUsername())
-                && !isTokenExpired(token);
+        return username.equals(userDetails.getUsername()) && !isTokenExpired(token);
     }
 }

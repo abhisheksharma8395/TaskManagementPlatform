@@ -4,10 +4,11 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-@Data
 @AllArgsConstructor
+@Data
 @NoArgsConstructor
-public class UserLoginResponse {
+public class ChangePasswordRequest {
     private String username;
-    private String password;
+    private String oldPassword;
+    private String newPassword;
 }

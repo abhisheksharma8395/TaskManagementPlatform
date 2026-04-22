@@ -26,6 +26,18 @@ public class JWTFilter extends OncePerRequestFilter {
     TaskUserDetailsService taskUserDetailsService;
 
     @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+
+        String path = request.getServletPath();
+
+        return path.startsWith("/auth/")
+                || path.startsWith("/oauth2/")
+                || path.startsWith("/login/")
+                || path.startsWith("/swagger-ui/")
+                || path.startsWith("/v3/api-docs");
+    }
+
+    @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
         String authHeader = request.getHeader("Authorization");
         String username = null;
