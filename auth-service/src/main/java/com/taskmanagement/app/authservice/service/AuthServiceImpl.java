@@ -130,6 +130,13 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
+    public UserProfileResponse getUserByUsername(String username){
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("User not found with username: " + username));
+        return mapToProfile(user);
+    }
+
+    @Override
     public UserProfileResponse updateProfile(Long id, RegisterRequest request) {
         return null;
     }

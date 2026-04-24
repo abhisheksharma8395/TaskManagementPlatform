@@ -21,4 +21,5 @@ public interface AuthService {
     String deactivateAccount(Long id) throws InvalidUserOperationException;
     List<UserProfileResponse> searchUsersByFullName(String fullName);
     List<UserProfileResponse> searchUsersByRole(String role);
+    UserProfileResponse getUserByUsername(String username);
 }

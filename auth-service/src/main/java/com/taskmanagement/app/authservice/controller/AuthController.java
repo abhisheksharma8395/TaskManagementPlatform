@@ -28,9 +28,14 @@ public class AuthController {
         return ResponseEntity.status(HttpStatus.CREATED).body(profile);
     }
 
-    @GetMapping("/user/{id}")
-    public ResponseEntity<UserProfileResponse> getUserById(@PathVariable Long id) {
-        return ResponseEntity.ok(authService.getUserById(id));
+    @GetMapping("/user/id/{userId}")
+    public ResponseEntity<UserProfileResponse> getUserById(@PathVariable Long userId) {
+        return ResponseEntity.ok(authService.getUserById(userId));
+    }
+
+    @GetMapping("/user/username/{username}")
+    public ResponseEntity<UserProfileResponse> getUserByUsername(@PathVariable String username) {
+        return ResponseEntity.ok(authService.getUserByUsername(username));
     }
 
     @GetMapping("/user/email/{email}")
