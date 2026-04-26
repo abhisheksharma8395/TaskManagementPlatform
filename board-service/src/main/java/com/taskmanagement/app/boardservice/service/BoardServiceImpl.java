@@ -6,9 +6,14 @@ import com.taskmanagement.app.boardservice.entity.BoardMember;
 import com.taskmanagement.app.boardservice.exception.AccessDeniedException;
 import com.taskmanagement.app.boardservice.exception.BadRequestException;
 import com.taskmanagement.app.boardservice.exception.ResourceNotFoundException;
+import com.taskmanagement.app.boardservice.feign.WorkspaceServiceClient;
 import com.taskmanagement.app.boardservice.repository.BoardMemberRepository;
 import com.taskmanagement.app.boardservice.repository.BoardRepository;
+import feign.FeignException;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpRequest;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,12 +25,23 @@ public class BoardServiceImpl implements BoardService {
 
     @Autowired private BoardRepository boardRepository;
     @Autowired private BoardMemberRepository memberRepository;
-
-    // ── Board CRUD ────────────────────────────────────────────────────────────
+    @Autowired private WorkspaceServiceClient workspaceServiceClient;
+    @Autowired private HttpServletRequest httpServletRequest;
 
     @Override
     @Transactional
     public BoardResponse createBoard(CreateBoardRequest request, Long requesterId) {
+
+        String token = httpServletRequest.getHeader("Authorization");
+        try {
+            workspaceServiceClient.getWorkspaceById(request.getWorkspaceId(), token);
+        } catch (FeignException.NotFound e) {
+            throw new BadRequestException("Workspace not found with id: " + request.getWorkspaceId());
+        } catch (FeignException e) {
+            throw new BadRequestException("Could not verify workspace: " + e.getMessage());
+        }
+
+
         Board board = new Board();
         board.setWorkspaceId(request.getWorkspaceId());
         board.setName(request.getName());
@@ -150,11 +166,9 @@ public class BoardServiceImpl implements BoardService {
                 .collect(Collectors.toList());
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
 
     private Board findOrThrow(Long boardId) {
-        return boardRepository.findById(boardId)
-                .orElseThrow(() -> new ResourceNotFoundException("Board not found with id: " + boardId));
+        return boardRepository.findById(boardId).orElseThrow(() -> new ResourceNotFoundException("Board not found with id: " + boardId));
     }
 
     private boolean canView(Board b, Long requesterId) {
