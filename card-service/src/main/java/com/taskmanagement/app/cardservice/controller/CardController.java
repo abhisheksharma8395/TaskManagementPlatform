@@ -139,7 +139,6 @@ public class CardController {
         return ResponseEntity.ok(cardService.getOverdueCardsByBoard(boardId));
     }
 
-    // ── Helper ────────────────────────────────────────────────────────────────
 
     private Long userId(HttpServletRequest req) {
         String header = req.getHeader("Authorization");
