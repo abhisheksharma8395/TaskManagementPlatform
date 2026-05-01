@@ -6,6 +6,8 @@ import com.taskmanagement.app.boardservice.entity.BoardMember;
 import com.taskmanagement.app.boardservice.exception.AccessDeniedException;
 import com.taskmanagement.app.boardservice.exception.BadRequestException;
 import com.taskmanagement.app.boardservice.exception.ResourceNotFoundException;
+import com.taskmanagement.app.boardservice.feign.AuthServiceClient;
+import com.taskmanagement.app.boardservice.feign.NotificationServiceClient;
 import com.taskmanagement.app.boardservice.feign.WorkspaceServiceClient;
 import com.taskmanagement.app.boardservice.repository.BoardMemberRepository;
 import com.taskmanagement.app.boardservice.repository.BoardRepository;
@@ -25,6 +27,8 @@ public class BoardServiceImpl implements BoardService {
     @Autowired private BoardMemberRepository memberRepository;
     @Autowired private WorkspaceServiceClient workspaceServiceClient;
     @Autowired private HttpServletRequest httpServletRequest;
+    @Autowired private AuthServiceClient authServiceClient;
+    @Autowired(required = false) private NotificationServiceClient notificationServiceClient;
 
     @Override
     @Transactional
@@ -114,8 +118,6 @@ public class BoardServiceImpl implements BoardService {
         boardRepository.delete(board);
     }
 
-    // ── Member management ─────────────────────────────────────────────────────
-
     @Override
     @Transactional
     public BoardMemberResponse addMember(Long boardId, AddBoardMemberRequest request, Long requesterId) {
@@ -128,7 +130,29 @@ public class BoardServiceImpl implements BoardService {
         member.setBoard(board);
         member.setUserId(request.getUserId());
         member.setRole(request.getRole() != null ? request.getRole() : "MEMBER");
-        return toMemberResponse(memberRepository.save(member));
+        BoardMemberResponse saved = toMemberResponse(memberRepository.save(member));
+
+        // Notifying the newly added member
+        if (notificationServiceClient != null) {
+            try {
+                String token = httpServletRequest.getHeader("Authorization");
+                UserProfileResponse newMember = authServiceClient.getUserById(request.getUserId());
+                SendNotificationRequest notif = new SendNotificationRequest();
+                notif.setRecipientId(request.getUserId());
+                notif.setRecipientEmail(null);                         // not a critical type — no email
+                notif.setType("ASSIGNMENT");
+                notif.setMessage("You were added to a board You have been added to board: " + board.getName() + " as " + member.getRole());
+                notif.setActorId(requesterId);
+                notif.setRelatedId(boardId);
+                notif.setRelatedType("BOARD");
+                notif.setTitle("You were added to a board");
+                notif.setDeepLinkUrl("/boards/" + boardId);
+                notificationServiceClient.send(notif,token);
+            } catch (Exception e) {
+                System.err.println("[BoardService] Failed to send board-member notification: " + e.getMessage());
+            }
+        }
+        return saved;
     }
 
     @Override

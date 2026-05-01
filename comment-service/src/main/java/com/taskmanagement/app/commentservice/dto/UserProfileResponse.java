@@ -1,5 +1,6 @@
 package com.taskmanagement.app.commentservice.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -14,5 +15,6 @@ public class UserProfileResponse {
     private String email;
     private String role;
     private String avatarUrl;
+    @JsonProperty("active")
     private boolean active;
 }

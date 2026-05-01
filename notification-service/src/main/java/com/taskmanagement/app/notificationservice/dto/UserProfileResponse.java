@@ -1,13 +1,14 @@
-package com.taskmanagement.app.listservice.dto;
+package com.taskmanagement.app.notificationservice.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+
 @Data
-@NoArgsConstructor
 @AllArgsConstructor
+@NoArgsConstructor
 public class UserProfileResponse {
     private Long userId;
     private String username;
@@ -16,5 +17,5 @@ public class UserProfileResponse {
     private String role;
     private String avatarUrl;
     @JsonProperty("active")
-    private boolean active;
+    private boolean isActive;
 }

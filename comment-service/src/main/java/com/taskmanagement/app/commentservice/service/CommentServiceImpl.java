@@ -7,6 +7,7 @@ import com.taskmanagement.app.commentservice.exception.AccessDeniedException;
 import com.taskmanagement.app.commentservice.exception.BadRequestException;
 import com.taskmanagement.app.commentservice.exception.ResourceNotFoundException;
 import com.taskmanagement.app.commentservice.feign.CardServiceClient;
+import com.taskmanagement.app.commentservice.feign.NotificationServiceClient;
 import com.taskmanagement.app.commentservice.repository.AttachmentRepository;
 import com.taskmanagement.app.commentservice.repository.CommentRepository;
 import feign.FeignException;
@@ -24,6 +25,7 @@ public class CommentServiceImpl implements CommentService {
     @Autowired private CommentRepository commentRepository;
     @Autowired private AttachmentRepository attachmentRepository;
     @Autowired private CardServiceClient cardServiceClient;
+    @Autowired(required = false) private NotificationServiceClient notificationServiceClient;
 
     private static final List<String> ALLOWED_TYPES = List.of(
             "image/jpeg", "image/png", "image/gif",
@@ -33,9 +35,9 @@ public class CommentServiceImpl implements CommentService {
 
     @Override
     @Transactional
-    public CommentResponse addComment(AddCommentRequest request, Long authorId , String token) {
+    public CommentResponse addComment(AddCommentRequest request, Long authorId, String token) {
 
-        CardResponse card = fetchCardOrThrow(request.getCardId() , token);
+        CardResponse card = fetchCardOrThrow(request.getCardId(), token);
         if (card.isArchived()) {
             throw new BadRequestException("Cannot add a comment to archived card: " + request.getCardId());
         }
@@ -47,19 +49,50 @@ public class CommentServiceImpl implements CommentService {
                 throw new BadRequestException("Cannot reply to a reply — only one level of threading is supported");
             }
             if (!parent.getCardId().equals(request.getCardId())) {
-                throw new BadRequestException(
-                        "Parent comment does not belong to card: " + request.getCardId());
+                throw new BadRequestException("Parent comment does not belong to card: " + request.getCardId());
             }
             if (parent.isDeleted()) {
                 throw new BadRequestException("Cannot reply to a deleted comment");
             }
         }
+
         Comment comment = new Comment();
         comment.setCardId(request.getCardId());
         comment.setAuthorId(authorId);
         comment.setContent(request.getContent());
         comment.setParentCommentId(request.getParentCommentId());
-        return toResponse(commentRepository.save(comment), false);
+        Comment saved = commentRepository.save(comment);
+
+        // Send notification to card assignee if they are not the comment author
+        if (notificationServiceClient != null
+                && card.getAssigneeId() != null
+                && !card.getAssigneeId().equals(authorId)) {
+            try {
+                boolean isMention = request.getContent() != null
+                        && request.getContent().matches(".*@\\S+.*");
+
+                String truncatedContent = request.getContent() != null && request.getContent().length() > 100
+                        ? request.getContent().substring(0, 100) + "..."
+                        : request.getContent();
+
+                SendNotificationRequest notif = new SendNotificationRequest();
+                notif.setRecipientId(card.getAssigneeId());
+                notif.setRecipientEmail(null);
+                notif.setActorId(authorId);
+                notif.setType(isMention ? "MENTION" : "COMMENT");
+                notif.setTitle(isMention ? "You were mentioned in a comment" : "New comment on your card");
+                notif.setMessage(truncatedContent);
+                notif.setRelatedId(request.getCardId());
+                notif.setRelatedType("CARD");
+                notif.setDeepLinkUrl("/cards/" + request.getCardId());
+
+                notificationServiceClient.send(notif, token);
+            } catch (Exception e) {
+                System.err.println("[CommentService] Failed to send comment notification: " + e.getMessage());
+            }
+        }
+
+        return toResponse(saved, false);
     }
 
     @Override

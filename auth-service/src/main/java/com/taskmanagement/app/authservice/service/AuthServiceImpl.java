@@ -191,7 +191,6 @@ public class AuthServiceImpl implements AuthService {
         response.setRole(user.getRole());
         response.setAvatarUrl(user.getAvatarUrl());
         response.setActive(user.isActive());
-        response.setCreatedAt(user.getCreatedAt());
         return response;
     }
 }

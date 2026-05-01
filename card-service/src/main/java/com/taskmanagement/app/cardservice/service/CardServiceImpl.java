@@ -4,8 +4,10 @@ import com.taskmanagement.app.cardservice.dto.*;
 import com.taskmanagement.app.cardservice.entity.Card;
 import com.taskmanagement.app.cardservice.exception.BadRequestException;
 import com.taskmanagement.app.cardservice.exception.ResourceNotFoundException;
+import com.taskmanagement.app.cardservice.feign.AuthServiceClient;
 import com.taskmanagement.app.cardservice.feign.BoardServiceClient;
 import com.taskmanagement.app.cardservice.feign.ListServiceClient;
+import com.taskmanagement.app.cardservice.feign.NotificationServiceClient;
 import com.taskmanagement.app.cardservice.repository.CardRepository;
 import feign.FeignException;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,8 +25,14 @@ public class CardServiceImpl implements CardService {
     @Autowired
     private CardRepository cardRepository;
 
+    @Autowired(required = false)
+    private NotificationServiceClient notificationServiceClient;
+
     @Autowired
     private BoardServiceClient boardServiceClient;
+
+    @Autowired
+    private AuthServiceClient authServiceClient;
 
     @Autowired
     private ListServiceClient listServiceClient;
@@ -32,7 +40,6 @@ public class CardServiceImpl implements CardService {
     @Autowired
     private HttpServletRequest httpServletRequest;
 
-    // ── CRUD ──────────────────────────────────────────────────────────────────
 
     @Override
     @Transactional
@@ -158,14 +165,38 @@ public class CardServiceImpl implements CardService {
         }
     }
 
-    // ── Field setters ─────────────────────────────────────────────────────────
-
     @Override
     @Transactional
     public CardResponse setAssignee(Long cardId, SetAssigneeRequest request) {
         Card card = findOrThrow(cardId);
+        Long previousAssigneeId = card.getAssigneeId();
         card.setAssigneeId(request.getAssigneeId());
-        return toResponse(cardRepository.save(card));
+        CardResponse saved = toResponse(cardRepository.save(card));
+
+        if (notificationServiceClient != null
+                && request.getAssigneeId() != null
+                && !request.getAssigneeId().equals(previousAssigneeId)) {
+            try {
+                String token = getToken();
+                UserProfileResponse assignee = authServiceClient.getUserById(request.getAssigneeId());
+                if (assignee != null) {
+                    SendNotificationRequest notif = new SendNotificationRequest();
+                    notif.setRecipientId(assignee.getUserId());
+                    notif.setRecipientEmail(assignee.getEmail());
+                    notif.setActorId(null);
+                    notif.setType("ASSIGNMENT");
+                    notif.setTitle("You have been assigned a card");
+                    notif.setMessage("You have been assigned to card: " + card.getTitle());
+                    notif.setRelatedId(cardId);
+                    notif.setRelatedType("CARD");
+                    notif.setDeepLinkUrl("/cards/" + cardId);
+                    notificationServiceClient.send(notif, token);
+                }
+            } catch (Exception e) {
+                System.err.println("[CardService] Failed to send assignment notification: " + e.getMessage());
+            }
+        }
+        return saved;
     }
 
     @Override
@@ -181,10 +212,34 @@ public class CardServiceImpl implements CardService {
     public CardResponse setStatus(Long cardId, SetStatusRequest request) {
         Card card = findOrThrow(cardId);
         card.setStatus(request.getStatus());
-        return toResponse(cardRepository.save(card));
+        CardResponse saved = toResponse(cardRepository.save(card));
+
+        if (notificationServiceClient != null
+                && "DONE".equalsIgnoreCase(request.getStatus())
+                && card.getAssigneeId() != null) {
+            try {
+                String token = getToken();
+                UserProfileResponse assignee = authServiceClient.getUserById(card.getAssigneeId());
+                if (assignee != null) {
+                    SendNotificationRequest notif = new SendNotificationRequest();
+                    notif.setRecipientId(assignee.getUserId());
+                    notif.setRecipientEmail(null);
+                    notif.setActorId(null);
+                    notif.setType("MOVE");
+                    notif.setTitle("Card moved to Done");
+                    notif.setMessage("Card \"" + card.getTitle() + "\" has been moved to Done.");
+                    notif.setRelatedId(card.getCardId());
+                    notif.setRelatedType("CARD");
+                    notif.setDeepLinkUrl("/cards/" + card.getCardId());
+                    notificationServiceClient.send(notif, token);
+                }
+            } catch (Exception e) {
+                System.err.println("[CardService] Failed to send status notification: " + e.getMessage());
+            }
+        }
+        return saved;
     }
 
-    // ── Archive / Delete ──────────────────────────────────────────────────────
 
     @Override
     @Transactional
