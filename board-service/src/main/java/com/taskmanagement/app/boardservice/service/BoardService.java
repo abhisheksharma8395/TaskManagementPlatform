@@ -24,6 +24,8 @@ public interface BoardService {
 
     void removeMember(Long boardId, Long userId, Long requesterId);
 
+    List<BoardResponse> getAllBoards();
+
     BoardMemberResponse updateMemberRole(Long boardId, Long userId, UpdateBoardMemberRoleRequest request, Long requesterId);
 
     List<BoardMemberResponse> getMembers(Long boardId, Long requesterId);

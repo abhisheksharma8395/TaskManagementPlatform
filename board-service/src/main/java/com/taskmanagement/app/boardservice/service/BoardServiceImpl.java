@@ -168,6 +168,13 @@ public class BoardServiceImpl implements BoardService {
     }
 
     @Override
+    public List<BoardResponse> getAllBoards() {
+        return boardRepository.findAll().stream()
+                .map(this::toResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Override
     @Transactional
     public BoardMemberResponse updateMemberRole(Long boardId, Long userId,
                                                 UpdateBoardMemberRoleRequest request, Long requesterId) {

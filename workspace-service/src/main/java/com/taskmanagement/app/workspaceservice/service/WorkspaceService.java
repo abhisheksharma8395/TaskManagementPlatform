@@ -20,6 +20,8 @@ public interface WorkspaceService {
 
     void deleteWorkspace(Long workspaceId, Long requesterId);
 
+    List<WorkspaceResponse> getAllWorkspaces();
+
     WorkspaceMemberResponse addMember(Long workspaceId, AddMemberRequest request, Long requesterId);
 
     void removeMember(Long workspaceId, Long userId, Long requesterId);

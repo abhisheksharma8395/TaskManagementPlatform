@@ -44,8 +44,16 @@ public class BoardController {
 
     @GetMapping("/member/{userId}")
     @Operation(summary = "Get all boards a user is a member of")
-    public ResponseEntity<List<BoardResponse>> getByMember(@PathVariable Long userId) {
+    public ResponseEntity<List<BoardResponse>> getByMember(@PathVariable Long userId, HttpServletRequest http) {
+        assertSameUserOrPlatformAdmin(userId, http);
         return ResponseEntity.ok(boardService.getBoardsByMember(userId));
+    }
+
+    @GetMapping("/admin/all")
+    @Operation(summary = "Get all boards across the platform (Platform Admin only)")
+    public ResponseEntity<List<BoardResponse>> getAllBoards(HttpServletRequest http) {
+        assertPlatformAdmin(http);
+        return ResponseEntity.ok(boardService.getAllBoards());
     }
 
     @PutMapping("/{boardId}")
@@ -101,5 +109,28 @@ public class BoardController {
         String token = header.substring(7);
         String username = jwtUtil.extractUsername(token);  // username IS in the token
         return authServiceClient.getUserByUsername(username).getBody().getUserId();  // fetch userId from auth-service
+    }
+
+    private void assertPlatformAdmin(HttpServletRequest request) {
+        String header = request.getHeader("Authorization");
+        if (header == null || !header.startsWith("Bearer ")) {
+            throw new RuntimeException("Authorization header missing or malformed");
+        }
+
+        String role = jwtUtil.extractRole(header.substring(7));
+        if (!"ADMIN".equalsIgnoreCase(role)) {
+            throw new RuntimeException("Platform admin access required");
+        }
+    }
+
+    private void assertSameUserOrPlatformAdmin(Long userId, HttpServletRequest request) {
+        Long requesterId = extractUserId(request);
+        if (requesterId.equals(userId)) return;
+
+        String header = request.getHeader("Authorization");
+        String role = jwtUtil.extractRole(header.substring(7));
+        if (!"ADMIN".equalsIgnoreCase(role)) {
+            throw new RuntimeException("You can only view your own boards");
+        }
     }
 }

@@ -88,6 +88,14 @@ public class WorkspaceServiceImpl implements WorkspaceService {
     }
 
     @Override
+    public List<WorkspaceResponse> getAllWorkspaces() {
+        return workspaceRepository.findAll()
+                .stream()
+                .map(this::mapToWorkspaceResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Override
     @Transactional
     public WorkspaceResponse updateWorkspace(Long workspaceId, UpdateWorkspaceRequest request, Long requesterId) {
         Workspace workspace = findWorkspaceOrThrow(workspaceId);

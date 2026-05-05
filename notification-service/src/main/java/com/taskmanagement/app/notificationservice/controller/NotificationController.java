@@ -36,10 +36,10 @@ public class NotificationController {
     @PostMapping("/bulk")
     @Operation(summary = "Send a notification to multiple recipients (Platform Admin broadcast)")
     public ResponseEntity<List<NotificationResponse>> sendBulk(
-            @Valid @RequestBody SendBulkNotificationRequest req) {
+            @Valid @RequestBody SendBulkNotificationRequest req , HttpServletRequest http) {
+        assertPlatformAdmin(http);
         return ResponseEntity.status(HttpStatus.CREATED).body(notificationService.sendBulk(req));
     }
-
     @GetMapping("/my")
     @Operation(summary = "Get all notifications for the authenticated user (newest first)")
     public ResponseEntity<List<NotificationResponse>> getMine(HttpServletRequest http) {
@@ -88,13 +88,17 @@ public class NotificationController {
 
     @GetMapping("/admin/all")
     @Operation(summary = "Get all notifications across the platform (Platform Admin only)")
-    public ResponseEntity<List<NotificationResponse>> getAll() {
+    public ResponseEntity<List<NotificationResponse>> getAll(HttpServletRequest http) {
+        assertPlatformAdmin(http);
         return ResponseEntity.ok(notificationService.getAll());
     }
 
+
     @GetMapping("/recipient/{recipientId}")
     @Operation(summary = "Get all notifications for a specific user (Platform Admin only)")
-    public ResponseEntity<List<NotificationResponse>> getByRecipient(@PathVariable Long recipientId) {
+    public ResponseEntity<List<NotificationResponse>> getByRecipient(@PathVariable Long recipientId,
+                                                                     HttpServletRequest http) {
+        assertPlatformAdmin(http);
         return ResponseEntity.ok(notificationService.getByRecipient(recipientId));
     }
 
@@ -103,5 +107,14 @@ public class NotificationController {
         if (h == null || !h.startsWith("Bearer "))
             throw new RuntimeException("Authorization header missing");
         return authServiceClient.getUserByUsername(jwtUtil.extractUsername(h.substring(7))).getBody().getUserId();
+    }
+
+    private void assertPlatformAdmin(HttpServletRequest req) {
+        String h = req.getHeader("Authorization");
+        if (h == null || !h.startsWith("Bearer "))
+            throw new RuntimeException("Authorization header missing");
+        if (!"ADMIN".equalsIgnoreCase(jwtUtil.extractRole(h.substring(7)))) {
+            throw new RuntimeException("Platform admin access required");
+        }
     }
 }

@@ -43,14 +43,23 @@ public class WorkspaceController {
 
     @GetMapping("/owner/{ownerId}")
     @Operation(summary = "Get all workspaces owned by a user")
-    public ResponseEntity<List<WorkspaceResponse>> getByOwner(@PathVariable Long ownerId) {
+    public ResponseEntity<List<WorkspaceResponse>> getByOwner(@PathVariable Long ownerId, HttpServletRequest httpRequest) {
+        assertSameUserOrPlatformAdmin(ownerId, httpRequest);
         return ResponseEntity.ok(workspaceService.getWorkspacesByOwner(ownerId));
     }
 
     @GetMapping("/member/{userId}")
     @Operation(summary = "Get all workspaces a user is a member of")
-    public ResponseEntity<List<WorkspaceResponse>> getByMember(@PathVariable Long userId) {
+    public ResponseEntity<List<WorkspaceResponse>> getByMember(@PathVariable Long userId, HttpServletRequest httpRequest) {
+        assertSameUserOrPlatformAdmin(userId, httpRequest);
         return ResponseEntity.ok(workspaceService.getWorkspacesByMember(userId));
+    }
+
+    @GetMapping("/admin/all")
+    @Operation(summary = "List all workspaces across the platform (Platform Admin only)")
+    public ResponseEntity<List<WorkspaceResponse>> getAllWorkspaces(HttpServletRequest httpRequest) {
+        assertPlatformAdmin(httpRequest);
+        return ResponseEntity.ok(workspaceService.getAllWorkspaces());
     }
 
     @GetMapping("/public")
@@ -136,5 +145,28 @@ public class WorkspaceController {
         String token = header.substring(7);
         String username = jwtUtil.extractUsername(token);  // username IS in the token
         return authServiceClient.getUserByUsername(username).getBody().getUserId();  // fetch userId from auth-service
+    }
+
+    private void assertPlatformAdmin(HttpServletRequest request) {
+        String header = request.getHeader("Authorization");
+        if (header == null || !header.startsWith("Bearer ")) {
+            throw new RuntimeException("Authorization header missing or malformed");
+        }
+
+        String role = jwtUtil.extractRole(header.substring(7));
+        if (!"ADMIN".equalsIgnoreCase(role)) {
+            throw new RuntimeException("Platform admin access required");
+        }
+    }
+
+    private void assertSameUserOrPlatformAdmin(Long userId, HttpServletRequest request) {
+        Long requesterId = extractUserId(request);
+        if (requesterId.equals(userId)) return;
+
+        String header = request.getHeader("Authorization");
+        String role = jwtUtil.extractRole(header.substring(7));
+        if (!"ADMIN".equalsIgnoreCase(role)) {
+            throw new RuntimeException("You can only view your own workspace membership");
+        }
     }
 }

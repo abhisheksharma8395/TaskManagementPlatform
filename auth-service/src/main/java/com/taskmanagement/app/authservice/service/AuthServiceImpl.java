@@ -8,13 +8,18 @@ import com.taskmanagement.app.authservice.exception.InvalidUserOperationExceptio
 import com.taskmanagement.app.authservice.exception.InvalidUserRegisterException;
 import com.taskmanagement.app.authservice.repository.UserRepository;
 import com.taskmanagement.app.authservice.util.JWTUtil;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -36,6 +41,9 @@ public class AuthServiceImpl implements AuthService {
 
     @Autowired
     BCryptPasswordEncoder passwordEncoder;
+
+    @Autowired
+    CloudinaryService cloudinaryService;
 
     @Override
     public UserProfileResponse register(RegisterRequest request) throws InvalidUserRegisterException {
@@ -130,6 +138,17 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
+    public String uploadAvatar(MultipartFile file, HttpServletRequest request) throws IOException {
+        Long userId = extractUserId(request);
+        String avatarUrl = cloudinaryService.uploadFile(file, "flowboard/avatars");
+        userRepository.findById(userId).ifPresent(user -> {
+            user.setAvatarUrl(avatarUrl);
+            userRepository.save(user);
+        });
+        return avatarUrl;
+    }
+
+    @Override
     public UserProfileResponse getUserByUsername(String username){
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new RuntimeException("User not found with username: " + username));
@@ -192,5 +211,12 @@ public class AuthServiceImpl implements AuthService {
         response.setAvatarUrl(user.getAvatarUrl());
         response.setActive(user.isActive());
         return response;
+    }
+
+    private Long extractUserId(HttpServletRequest req){
+        String token = req.getHeader("Authorization");
+        String username = jwtUtil.extractUsername(token);
+        Long userId = userRepository.findByUsername(username).orElseThrow().getUserId();
+        return userId;
     }
 }
