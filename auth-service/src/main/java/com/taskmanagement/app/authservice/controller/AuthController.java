@@ -38,7 +38,7 @@ public class AuthController {
             @RequestParam("file") MultipartFile file,
             HttpServletRequest request) throws IOException {
 
-        String avatarUrl = authService.uploadAvatar(file,request).getBody();
+        String avatarUrl = authService.uploadAvatar(file,request);
         return ResponseEntity.ok(avatarUrl);
     }
 

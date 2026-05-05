@@ -12,7 +12,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.List;
 
 @RestController
@@ -72,12 +74,18 @@ public class CommentController {
     }
 
 
-    @PostMapping("/attachments")
-    @Operation(summary = "Add a file attachment to a card")
-    public ResponseEntity<AttachmentResponse> addAttachment(@Valid @RequestBody AddAttachmentRequest req,
-                                                            HttpServletRequest http) {
+    @PostMapping(value = "/attachments", consumes = "multipart/form-data")
+    public ResponseEntity<AttachmentResponse> addAttachment(
+            @RequestParam("file")   MultipartFile file,
+            @RequestParam("cardId") Long cardId,
+            HttpServletRequest http) throws IOException {
+
+        AddAttachmentRequest req = new AddAttachmentRequest();
+        req.setCardId(cardId);
+        req.setFile(file);
+
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(commentService.addAttachment(req, userId(http) , getToken()));
+                .body(commentService.addAttachment(req, userId(http), getToken()));
     }
 
     @GetMapping("/attachments/card/{cardId}")
@@ -88,7 +96,7 @@ public class CommentController {
 
     @DeleteMapping("/attachments/{attachmentId}")
     @Operation(summary = "Delete your own attachment")
-    public ResponseEntity<String> deleteAttachment(@PathVariable Long attachmentId, HttpServletRequest http) {
+    public ResponseEntity<String> deleteAttachment(@PathVariable Long attachmentId, HttpServletRequest http) throws IOException {
         commentService.deleteAttachment(attachmentId, userId(http));
         return ResponseEntity.ok("Attachment deleted");
     }

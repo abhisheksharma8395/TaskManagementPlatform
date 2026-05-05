@@ -1,6 +1,12 @@
 package com.taskmanagement.app.commentservice.service;
 
 import com.taskmanagement.app.commentservice.dto.*;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
 import java.util.List;
 
 public interface CommentService {
@@ -11,7 +17,7 @@ public interface CommentService {
     CommentResponse updateComment(Long commentId, UpdateCommentRequest request, Long requesterId);
     void deleteComment(Long commentId, Long requesterId);
     long getCommentCount(Long cardId , String token);
-    AttachmentResponse addAttachment(AddAttachmentRequest request, Long uploaderId , String token);
+    AttachmentResponse addAttachment(AddAttachmentRequest request, Long uploaderId , String token) throws IOException;
     List<AttachmentResponse> getAttachmentsByCard(Long cardId , String token);
-    void deleteAttachment(Long attachmentId, Long requesterId);
+    void deleteAttachment(Long attachmentId, Long requesterId) throws IOException;
 }

@@ -38,6 +38,9 @@ public class Attachment {
     @Column(nullable = false, updatable = false)
     private LocalDateTime uploadedAt;
 
+    @Column
+    private String viewerUrl;  // Google Docs viewer URL for PDFs
+
     @PrePersist
     void onCreate() { uploadedAt = LocalDateTime.now(); }
 }

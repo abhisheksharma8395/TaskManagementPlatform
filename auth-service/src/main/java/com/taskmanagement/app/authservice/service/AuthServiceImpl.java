@@ -214,7 +214,8 @@ public class AuthServiceImpl implements AuthService {
     }
 
     private Long extractUserId(HttpServletRequest req){
-        String token = req.getHeader("Authorization");
+        String header = req.getHeader("Authorization");
+        String token = header.substring(7);
         String username = jwtUtil.extractUsername(token);
         Long userId = userRepository.findByUsername(username).orElseThrow().getUserId();
         return userId;

@@ -14,9 +14,12 @@ import feign.FeignException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -26,6 +29,7 @@ public class CommentServiceImpl implements CommentService {
     @Autowired private AttachmentRepository attachmentRepository;
     @Autowired private CardServiceClient cardServiceClient;
     @Autowired(required = false) private NotificationServiceClient notificationServiceClient;
+    @Autowired private CloudinaryService cloudinaryService;
 
     private static final List<String> ALLOWED_TYPES = List.of(
             "image/jpeg", "image/png", "image/gif",
@@ -158,7 +162,21 @@ public class CommentServiceImpl implements CommentService {
 
     @Override
     @Transactional
-    public AttachmentResponse addAttachment(AddAttachmentRequest request, Long uploaderId , String token) {
+    public AttachmentResponse addAttachment(AddAttachmentRequest request, Long uploaderId , String token) throws IOException {
+
+        try {
+            MultipartFile file = request.getFile();
+            Map<String,String> uploadResult = cloudinaryService.uploadFile(file, "flowboard/attachments");
+
+            request.setFileUrl(uploadResult.get("fileUrl"));
+            request.setViewerUrl(uploadResult.get("viewerUrl")); // null for images
+            request.setFileName(file.getOriginalFilename());
+            request.setFileType(file.getContentType());
+            request.setSizeKb(file.getSize() / 1024);
+
+        } catch (IOException e) {
+            throw new RuntimeException("Cloudinary upload failed: " + e.getMessage());
+        }
 
         CardResponse card = fetchCardOrThrow(request.getCardId(),token);
 
@@ -171,6 +189,7 @@ public class CommentServiceImpl implements CommentService {
                 .stream()
                 .anyMatch(a -> a.getFileUrl().equals(request.getFileUrl()));
         if (duplicateUrl) {
+            cloudinaryService.deleteFile(request.getFileUrl());
             throw new BadRequestException(
                     "This file is already attached to card: " + request.getCardId());
         }
@@ -189,6 +208,7 @@ public class CommentServiceImpl implements CommentService {
         attachment.setUploaderId(uploaderId);
         attachment.setFileName(request.getFileName());
         attachment.setFileUrl(request.getFileUrl());
+        attachment.setViewerUrl(request.getViewerUrl()); // ← add this
         attachment.setFileType(request.getFileType());
         attachment.setSizeKb(request.getSizeKb());
 
@@ -206,13 +226,14 @@ public class CommentServiceImpl implements CommentService {
 
     @Override
     @Transactional
-    public void deleteAttachment(Long attachmentId, Long requesterId) {
+    public void deleteAttachment(Long attachmentId, Long requesterId) throws IOException {
         Attachment attachment = attachmentRepository.findById(attachmentId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Attachment not found: " + attachmentId));
         if (!attachment.getUploaderId().equals(requesterId)) {
             throw new AccessDeniedException("You can only delete your own attachments");
         }
+        cloudinaryService.deleteFile(attachment.getFileUrl());
         attachmentRepository.delete(attachment);
     }
 
