@@ -74,18 +74,15 @@ public class CommentController {
     }
 
 
-    @PostMapping(value = "/attachments", consumes = "multipart/form-data")
+    @PostMapping("/attachments")
     public ResponseEntity<AttachmentResponse> addAttachment(
-            @RequestParam("file")   MultipartFile file,
-            @RequestParam("cardId") Long cardId,
-            HttpServletRequest http) throws IOException {
+            @ModelAttribute @Valid AddAttachmentRequest request,
+            HttpServletRequest httpServletRequest) throws IOException {
 
-        AddAttachmentRequest req = new AddAttachmentRequest();
-        req.setCardId(cardId);
-        req.setFile(file);
-
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(commentService.addAttachment(req, userId(http), getToken()));
+        Long uploaderId = userId(httpServletRequest);
+        String token = httpServletRequest.getHeader("Authorization");
+        AttachmentResponse response = commentService.addAttachment(request, uploaderId, token);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @GetMapping("/attachments/card/{cardId}")
@@ -95,10 +92,13 @@ public class CommentController {
     }
 
     @DeleteMapping("/attachments/{attachmentId}")
-    @Operation(summary = "Delete your own attachment")
-    public ResponseEntity<String> deleteAttachment(@PathVariable Long attachmentId, HttpServletRequest http) throws IOException {
-        commentService.deleteAttachment(attachmentId, userId(http));
-        return ResponseEntity.ok("Attachment deleted");
+    public ResponseEntity<Void> deleteAttachment(
+            @PathVariable Long attachmentId,
+            HttpServletRequest httpServletRequest) throws IOException {
+
+        Long uploaderId = userId(httpServletRequest);
+        commentService.deleteAttachment(attachmentId, uploaderId);
+        return ResponseEntity.noContent().build();
     }
 
 
@@ -111,7 +111,7 @@ public class CommentController {
     private String getToken() {
         String header = httpServletRequest.getHeader("Authorization");
         if (header != null && header.startsWith("Bearer ")) {
-            return header;
+            return header.substring(7);
         }
         throw new RuntimeException("Token not found");
     }

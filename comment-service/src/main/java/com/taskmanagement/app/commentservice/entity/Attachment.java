@@ -27,7 +27,7 @@ public class Attachment {
 
     /** S3 / CDN URL of the uploaded file */
     @Column(nullable = false)
-    private String fileUrl;
+    private String fileKey;
 
     /** MIME type e.g. image/png, application/pdf */
     private String fileType;
@@ -37,9 +37,6 @@ public class Attachment {
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime uploadedAt;
-
-    @Column
-    private String viewerUrl;  // Google Docs viewer URL for PDFs
 
     @PrePersist
     void onCreate() { uploadedAt = LocalDateTime.now(); }

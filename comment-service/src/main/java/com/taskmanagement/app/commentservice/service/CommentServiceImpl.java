@@ -29,7 +29,7 @@ public class CommentServiceImpl implements CommentService {
     @Autowired private AttachmentRepository attachmentRepository;
     @Autowired private CardServiceClient cardServiceClient;
     @Autowired(required = false) private NotificationServiceClient notificationServiceClient;
-    @Autowired private CloudinaryService cloudinaryService;
+    @Autowired private S3Service s3Service;
 
     private static final List<String> ALLOWED_TYPES = List.of(
             "image/jpeg", "image/png", "image/gif",
@@ -162,55 +162,51 @@ public class CommentServiceImpl implements CommentService {
 
     @Override
     @Transactional
-    public AttachmentResponse addAttachment(AddAttachmentRequest request, Long uploaderId , String token) throws IOException {
+    public AttachmentResponse addAttachment(AddAttachmentRequest request, Long uploaderId, String token) throws IOException {
 
-        try {
-            MultipartFile file = request.getFile();
-            Map<String,String> uploadResult = cloudinaryService.uploadFile(file, "flowboard/attachments");
-
-            request.setFileUrl(uploadResult.get("fileUrl"));
-            request.setViewerUrl(uploadResult.get("viewerUrl")); // null for images
-            request.setFileName(file.getOriginalFilename());
-            request.setFileType(file.getContentType());
-            request.setSizeKb(file.getSize() / 1024);
-
-        } catch (IOException e) {
-            throw new RuntimeException("Cloudinary upload failed: " + e.getMessage());
-        }
-
-        CardResponse card = fetchCardOrThrow(request.getCardId(),token);
+        // Validate card first — before uploading
+        CardResponse card = fetchCardOrThrow(request.getCardId(), token);
 
         if (card.isArchived()) {
             throw new BadRequestException(
                     "Cannot add an attachment to archived card: " + request.getCardId());
         }
 
-        boolean duplicateUrl = attachmentRepository.findByCardId(request.getCardId())
+        MultipartFile file = request.getFile();
+
+        // Validate file type before uploading
+        String fileType = file.getContentType();
+        if (!ALLOWED_TYPES.contains(fileType)) {
+            throw new BadRequestException(fileType + " File Type is not allowed");
+        }
+
+        long sizeKb = file.getSize() / 1024;
+        if (sizeKb > 10240) {
+            throw new BadRequestException(
+                    "File size can't be more than 10 mb. Your current file size is: "
+                            + sizeKb / 1024 + " mb");
+        }
+
+        // Upload to S3 — get back the key
+        String fileKey = s3Service.uploadFile(file);
+
+        // Check duplicate by fileName for this card
+        boolean duplicate = attachmentRepository.findByCardId(request.getCardId())
                 .stream()
-                .anyMatch(a -> a.getFileUrl().equals(request.getFileUrl()));
-        if (duplicateUrl) {
-            cloudinaryService.deleteFile(request.getFileUrl());
+                .anyMatch(a -> a.getFileName().equals(file.getOriginalFilename()));
+        if (duplicate) {
+            s3Service.deleteFile(fileKey); // clean up uploaded file
             throw new BadRequestException(
                     "This file is already attached to card: " + request.getCardId());
-        }
-        if (request.getSizeKb() > 10240) {
-            throw new BadRequestException(
-                    "File size can't be more than 10 mb Your current file size is: "
-                            + request.getSizeKb() / 1024 + "mb");
-        }
-        if (!ALLOWED_TYPES.contains(request.getFileType())) {
-            throw new BadRequestException(
-                    request.getFileType()+" File Type is not allowed");
         }
 
         Attachment attachment = new Attachment();
         attachment.setCardId(request.getCardId());
         attachment.setUploaderId(uploaderId);
-        attachment.setFileName(request.getFileName());
-        attachment.setFileUrl(request.getFileUrl());
-        attachment.setViewerUrl(request.getViewerUrl()); // ← add this
-        attachment.setFileType(request.getFileType());
-        attachment.setSizeKb(request.getSizeKb());
+        attachment.setFileName(file.getOriginalFilename());
+        attachment.setFileKey(fileKey);
+        attachment.setFileType(fileType);
+        attachment.setSizeKb(sizeKb);
 
         return toAttachmentResponse(attachmentRepository.save(attachment));
     }
@@ -226,15 +222,17 @@ public class CommentServiceImpl implements CommentService {
 
     @Override
     @Transactional
-    public void deleteAttachment(Long attachmentId, Long requesterId) throws IOException {
+    public void deleteAttachment(Long attachmentId, Long uploaderId) {
         Attachment attachment = attachmentRepository.findById(attachmentId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Attachment not found: " + attachmentId));
-        if (!attachment.getUploaderId().equals(requesterId)) {
+
+        if (!attachment.getUploaderId().equals(uploaderId)) {
             throw new AccessDeniedException("You can only delete your own attachments");
         }
-        cloudinaryService.deleteFile(attachment.getFileUrl());
-        attachmentRepository.delete(attachment);
+
+        s3Service.deleteFile(attachment.getFileKey()); // delete from S3
+        attachmentRepository.deleteById(attachmentId);
     }
 
     private CardResponse fetchCardOrThrow(Long cardId , String token) {
@@ -251,9 +249,6 @@ public class CommentServiceImpl implements CommentService {
                     "Could not verify card " + cardId + " — card-service error: " + e.status());
         }
     }
-
-
-
     private Comment findCommentOrThrow(Long commentId) {
         return commentRepository.findById(commentId)
                 .orElseThrow(() -> new ResourceNotFoundException(
@@ -288,16 +283,16 @@ public class CommentServiceImpl implements CommentService {
 
 
 
-    private AttachmentResponse toAttachmentResponse(Attachment a) {
-        AttachmentResponse r = new AttachmentResponse();
-        r.setAttachmentId(a.getAttachmentId());
-        r.setCardId(a.getCardId());
-        r.setUploaderId(a.getUploaderId());
-        r.setFileName(a.getFileName());
-        r.setFileUrl(a.getFileUrl());
-        r.setFileType(a.getFileType());
-        r.setSizeKb(a.getSizeKb());
-        r.setUploadedAt(a.getUploadedAt());
-        return r;
+    private AttachmentResponse toAttachmentResponse(Attachment attachment) {
+        AttachmentResponse response = new AttachmentResponse();
+        response.setAttachmentId(attachment.getAttachmentId());
+        response.setCardId(attachment.getCardId());
+        response.setUploaderId(attachment.getUploaderId());
+        response.setFileName(attachment.getFileName());
+        response.setFileType(attachment.getFileType());
+        response.setSizeKb(attachment.getSizeKb());
+        response.setUploadedAt(attachment.getUploadedAt());
+        response.setFileUrl(s3Service.generatePresignedUrl(attachment.getFileKey()));
+        return response;
     }
 }

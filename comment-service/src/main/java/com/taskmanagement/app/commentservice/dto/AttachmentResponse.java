@@ -6,7 +6,6 @@ import lombok.Data; import java.time.LocalDateTime;
     private Long uploaderId;
     private String fileName;
     private String fileUrl;
-    private String viewerUrl;
     private String fileType;
     private Long sizeKb;
     private LocalDateTime uploadedAt;
