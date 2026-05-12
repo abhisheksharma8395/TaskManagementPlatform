@@ -11,7 +11,7 @@
     <groupId>com.taskmanagement.app</groupId>
     <artifactId>board-service</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <n>board-service</n>
+    <name>board-service</name>
     <description>FlowBoard – Board and BoardMember microservice</description>
     <properties>
         <java.version>17</java.version>
@@ -63,6 +63,11 @@
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-circuitbreaker-resilience4j</artifactId>
+            <version>5.0.1</version>
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>

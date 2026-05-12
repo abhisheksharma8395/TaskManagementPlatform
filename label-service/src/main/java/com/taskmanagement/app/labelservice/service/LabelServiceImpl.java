@@ -224,7 +224,7 @@ public class LabelServiceImpl implements LabelService {
 
     private void validateBoard(Long boardId, String token) {
         try {
-            ResponseEntity<BoardResponse> res = boardServiceClient.getBoardById(boardId, token);
+            ResponseEntity<BoardResponse> res = boardServiceClient.getById(boardId, token);
             if (res.getBody() == null)
                 throw new ResourceNotFoundException("Board not found: " + boardId);
         } catch (Exception e) {

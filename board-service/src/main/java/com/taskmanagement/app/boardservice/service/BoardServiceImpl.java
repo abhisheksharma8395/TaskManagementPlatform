@@ -41,6 +41,8 @@ public class BoardServiceImpl implements BoardService {
             throw new BadRequestException("Workspace not found with id: " + request.getWorkspaceId());
         } catch (FeignException e) {
             throw new BadRequestException("Could not verify workspace: " + e.getMessage());
+        } catch (RuntimeException e) {
+            throw new BadRequestException("Workspace service is unavailable. Please try again later.");
         }
 
 

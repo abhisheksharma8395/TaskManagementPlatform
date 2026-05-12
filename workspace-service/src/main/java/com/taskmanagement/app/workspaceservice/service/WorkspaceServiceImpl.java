@@ -207,9 +207,9 @@ public class WorkspaceServiceImpl implements WorkspaceService {
 
     /**
      * A user can view a workspace if:
-     *  - it is PUBLIC, OR
-     *  - they are the owner, OR
-     *  - they are a member
+     *  it is PUBLIC, OR
+     *  they are the owner, OR
+     *  they are a member
      */
     private void assertCanView(Workspace workspace, Long requesterId) {
         if ("PUBLIC".equalsIgnoreCase(workspace.getVisibility())) return;

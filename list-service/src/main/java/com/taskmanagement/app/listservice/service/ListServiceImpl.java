@@ -35,7 +35,8 @@ public class ListServiceImpl implements ListService {
         // checking if board with board id exists or not.
         BoardResponse board;
         try {
-            board = boardServiceClient.getBoardById(request.getBoardId(), token);
+            board = boardServiceClient.getBoardById(request.getBoardId(), token).getBody();
+            if (board == null) throw new BadRequestException("Board not found with id: " + request.getBoardId());
         } catch (FeignException.NotFound e) {
             throw new BadRequestException("Board not found with id: " + request.getBoardId());
         } catch (FeignException e) {
@@ -130,7 +131,8 @@ public class ListServiceImpl implements ListService {
         // 1. Fetch source board to get its workspaceId
         BoardResponse sourceBoard;
         try {
-            sourceBoard = boardServiceClient.getBoardById(list.getBoardId(), token);
+            sourceBoard = boardServiceClient.getBoardById(list.getBoardId(), token).getBody();
+            if (sourceBoard == null) throw new BadRequestException("Source board not found with id: " + list.getBoardId());
         } catch (FeignException.NotFound e) {
             throw new BadRequestException("Source board not found with id: " + list.getBoardId());
         } catch (FeignException e) {
@@ -140,7 +142,8 @@ public class ListServiceImpl implements ListService {
         // 2. Fetch target board to validate it exists and is not closed
         BoardResponse targetBoard;
         try {
-            targetBoard = boardServiceClient.getBoardById(request.getTargetBoardId(), token);
+            targetBoard = boardServiceClient.getBoardById(request.getTargetBoardId(), token).getBody();
+            if (targetBoard == null) throw new BadRequestException("Target board not found with id: " + request.getTargetBoardId());
         } catch (FeignException.NotFound e) {
             throw new BadRequestException("Target board not found with id: " + request.getTargetBoardId());
         } catch (FeignException e) {

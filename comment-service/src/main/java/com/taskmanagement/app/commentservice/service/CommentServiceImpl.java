@@ -237,7 +237,7 @@ public class CommentServiceImpl implements CommentService {
 
     private CardResponse fetchCardOrThrow(Long cardId , String token) {
         try {
-            CardResponse card = cardServiceClient.getById(cardId,token).getBody();
+            CardResponse card = cardServiceClient.getCardById(cardId,token).getBody();
             if (card == null) {
                 throw new ResourceNotFoundException("Card not found: " + cardId);
             }

@@ -10,6 +10,10 @@ import org.springframework.security.web.SecurityFilterChain;
 @EnableWebSecurity
 public class SecurityConfig {
 
+    public SecurityConfig() {
+        System.out.println("=== SECURITY CONFIG LOADED ==="); // ADD THIS
+    }
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http

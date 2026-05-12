@@ -1,13 +1,32 @@
 package com.taskmanagement.app.listservice.feign;
 
 import com.taskmanagement.app.listservice.dto.UserProfileResponse;
+import com.taskmanagement.app.listservice.exception.BadRequestException;
 import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Component;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestHeader;
 
-@FeignClient(name = "auth-service", path = "/auth")
+@FeignClient(name = "auth-service", path = "/auth", fallback = AuthServiceClient.Fallback.class)
 public interface AuthServiceClient {
+
     @GetMapping("/user/id/{userId}")
     UserProfileResponse getUserById(@PathVariable Long userId);
+
+    @GetMapping("/user/username/{username}")
+    ResponseEntity<UserProfileResponse> getUserByUsername(@PathVariable String username);
+
+    @Component
+    class Fallback implements AuthServiceClient {
+        @Override
+        public UserProfileResponse getUserById(Long userId) {
+            throw new BadRequestException("Auth service is currently unavailable. Cannot verify user with id: " + userId);
+        }
+
+        @Override
+        public ResponseEntity<UserProfileResponse> getUserByUsername(String username) {
+            throw new BadRequestException("Auth service is currently unavailable. Cannot verify user: " + username);
+        }
+    }
 }
