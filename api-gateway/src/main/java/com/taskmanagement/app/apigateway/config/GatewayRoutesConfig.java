@@ -31,10 +31,10 @@ public class GatewayRoutesConfig {
                 .route(path("/auth-service/**"),
                         HandlerFunctions.http())
                 .filter(stripPrefix(1))
-                .filter(LoadBalancerFilterFunctions.lb("AUTH-SERVICE"))
                 .filter(CircuitBreakerFilterFunctions.circuitBreaker(
                         "auth-service",
                         URI.create("forward:/fallback/auth-service")))
+                .filter(LoadBalancerFilterFunctions.lb("AUTH-SERVICE"))
                 .build();
     }
 
@@ -44,10 +44,10 @@ public class GatewayRoutesConfig {
                 .route(path("/workspace-service/**"),
                         HandlerFunctions.http())
                 .filter(stripPrefix(1))
-                .filter(LoadBalancerFilterFunctions.lb("WORKSPACE-SERVICE"))
                 .filter(CircuitBreakerFilterFunctions.circuitBreaker(
                         "workspace-service",
                         URI.create("forward:/fallback/workspace-service")))
+                .filter(LoadBalancerFilterFunctions.lb("WORKSPACE-SERVICE"))
                 .build();
     }
 
@@ -57,10 +57,10 @@ public class GatewayRoutesConfig {
                 .route(path("/board-service/**"),
                         HandlerFunctions.http())
                 .filter(stripPrefix(1))
-                .filter(LoadBalancerFilterFunctions.lb("BOARD-SERVICE"))
                 .filter(CircuitBreakerFilterFunctions.circuitBreaker(
                         "board-service",
                         URI.create("forward:/fallback/board-service")))
+                .filter(LoadBalancerFilterFunctions.lb("BOARD-SERVICE"))
                 .build();
     }
 
@@ -70,10 +70,10 @@ public class GatewayRoutesConfig {
                 .route(path("/card-service/**"),
                         HandlerFunctions.http())
                 .filter(stripPrefix(1))
-                .filter(LoadBalancerFilterFunctions.lb("CARD-SERVICE"))
                 .filter(CircuitBreakerFilterFunctions.circuitBreaker(
                         "card-service",
                         URI.create("forward:/fallback/card-service")))
+                .filter(LoadBalancerFilterFunctions.lb("CARD-SERVICE"))
                 .build();
     }
 
@@ -83,10 +83,10 @@ public class GatewayRoutesConfig {
                 .route(path("/list-service/**"),
                         HandlerFunctions.http())
                 .filter(stripPrefix(1))
-                .filter(LoadBalancerFilterFunctions.lb("LIST-SERVICE"))
                 .filter(CircuitBreakerFilterFunctions.circuitBreaker(
                         "list-service",
                         URI.create("forward:/fallback/list-service")))
+                .filter(LoadBalancerFilterFunctions.lb("LIST-SERVICE"))
                 .build();
     }
 
@@ -96,10 +96,10 @@ public class GatewayRoutesConfig {
                 .route(path("/comment-service/**"),
                         HandlerFunctions.http())
                 .filter(stripPrefix(1))
-                .filter(LoadBalancerFilterFunctions.lb("COMMENT-SERVICE"))
                 .filter(CircuitBreakerFilterFunctions.circuitBreaker(
                         "comment-service",
                         URI.create("forward:/fallback/comment-service")))
+                .filter(LoadBalancerFilterFunctions.lb("COMMENT-SERVICE"))
                 .build();
     }
 
@@ -109,10 +109,10 @@ public class GatewayRoutesConfig {
                 .route(path("/label-service/**"),
                         HandlerFunctions.http())
                 .filter(stripPrefix(1))
-                .filter(LoadBalancerFilterFunctions.lb("LABEL-SERVICE"))
                 .filter(CircuitBreakerFilterFunctions.circuitBreaker(
                         "label-service",
                         URI.create("forward:/fallback/label-service")))
+                .filter(LoadBalancerFilterFunctions.lb("LABEL-SERVICE"))
                 .build();
     }
 
@@ -122,10 +122,10 @@ public class GatewayRoutesConfig {
                 .route(path("/notification-service/**"),
                         HandlerFunctions.http())
                 .filter(stripPrefix(1))
-                .filter(LoadBalancerFilterFunctions.lb("NOTIFICATION-SERVICE"))
                 .filter(CircuitBreakerFilterFunctions.circuitBreaker(
                         "notification-service",
                         URI.create("forward:/fallback/notification-service")))
+                .filter(LoadBalancerFilterFunctions.lb("NOTIFICATION-SERVICE"))
                 .build();
     }
 }
