@@ -76,4 +76,15 @@ public class AuthController {
     public ResponseEntity<?> searchByRole(@PathVariable String role) {
         return ResponseEntity.ok(authService.searchUsersByRole(role));
     }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<String> forgotPassword(@RequestBody ForgotPasswordRequest request) {
+        authService.forgotPassword(request.getEmail());
+        return ResponseEntity.ok("OTP sent to your email address");
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<String> resetPassword(@RequestBody ResetPasswordRequest request) {
+        return ResponseEntity.ok(authService.resetPassword(request));
+    }
 }

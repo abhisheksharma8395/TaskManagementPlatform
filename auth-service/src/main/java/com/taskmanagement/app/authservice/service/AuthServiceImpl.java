@@ -2,6 +2,7 @@ package com.taskmanagement.app.authservice.service;
 
 import com.taskmanagement.app.authservice.dto.AuthResponse;
 import com.taskmanagement.app.authservice.dto.RegisterRequest;
+import com.taskmanagement.app.authservice.dto.ResetPasswordRequest;
 import com.taskmanagement.app.authservice.dto.UserProfileResponse;
 import com.taskmanagement.app.authservice.entity.User;
 import com.taskmanagement.app.authservice.exception.InvalidUserOperationException;
@@ -10,6 +11,7 @@ import com.taskmanagement.app.authservice.repository.UserRepository;
 import com.taskmanagement.app.authservice.util.JWTUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -20,6 +22,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.security.SecureRandom;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -31,7 +35,13 @@ public class AuthServiceImpl implements AuthService {
     UserRepository userRepository;
 
     @Autowired
+    private EmailService emailService;
+
+    @Autowired
     BCryptPasswordEncoder encoder;
+
+    @Value("${otp.expiry.minutes}")
+    private int otpExpiryMinutes;
 
     @Autowired
     JWTUtil jwtUtil;
@@ -199,6 +209,48 @@ public class AuthServiceImpl implements AuthService {
                 .stream()
                 .map(this::mapToProfile)
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public void forgotPassword(String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("No account found with email: " + email));
+
+        // Generate 6-digit OTP
+        String otp = String.format("%06d", new SecureRandom().nextInt(999999));
+
+        user.setOtpCode(otp);
+        user.setOtpExpiry(LocalDateTime.now().plusMinutes(otpExpiryMinutes));
+        userRepository.save(user);
+
+        emailService.sendOtpEmail(email, otp);
+    }
+
+
+    @Override
+    public String resetPassword(ResetPasswordRequest request) {
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new RuntimeException("No account found with email: " + request.getEmail()));
+
+        if (user.getOtpCode() == null || !user.getOtpCode().equals(request.getOtp())) {
+            throw new RuntimeException("Invalid OTP");
+        }
+        if (user.getOtpExpiry() == null || LocalDateTime.now().isAfter(user.getOtpExpiry())) {
+            throw new RuntimeException("OTP has expired. Please request a new one.");
+        }
+
+        String passwordRegex = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]{8,20}$";
+        if (!Pattern.matches(passwordRegex, request.getNewPassword())) {
+            throw new RuntimeException("Weak password! Must have uppercase, lowercase, digit, special char, 8-20 chars.");
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        // Clear OTP after successful reset
+        user.setOtpCode(null);
+        user.setOtpExpiry(null);
+        userRepository.save(user);
+
+        return "Password reset successfully. You can now login with your new password.";
     }
 
     private UserProfileResponse mapToProfile(User user) {

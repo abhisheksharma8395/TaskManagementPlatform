@@ -2,6 +2,7 @@ package com.taskmanagement.app.authservice.service;
 
 import com.taskmanagement.app.authservice.dto.AuthResponse;
 import com.taskmanagement.app.authservice.dto.RegisterRequest;
+import com.taskmanagement.app.authservice.dto.ResetPasswordRequest;
 import com.taskmanagement.app.authservice.dto.UserProfileResponse;
 import com.taskmanagement.app.authservice.exception.InvalidUserOperationException;
 import com.taskmanagement.app.authservice.exception.InvalidUserRegisterException;
@@ -27,4 +28,6 @@ public interface AuthService {
     List<UserProfileResponse> searchUsersByRole(String role);
     UserProfileResponse getUserByUsername(String username);
     String uploadAvatar(MultipartFile file, HttpServletRequest request) throws IOException;
+    void forgotPassword(String email);
+    String resetPassword(ResetPasswordRequest request);
 }

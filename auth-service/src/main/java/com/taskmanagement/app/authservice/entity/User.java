@@ -43,6 +43,10 @@ public class User {
 
     private LocalDateTime updatedAt;
 
+    private String otpCode;
+
+    private LocalDateTime otpExpiry;
+
     @PrePersist
     public void onCreate() {
         createdAt = LocalDateTime.now();
