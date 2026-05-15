@@ -104,7 +104,7 @@ public class AuthServiceImpl implements AuthService {
         );
         if (authentication.isAuthenticated()) {
             User user = userRepository.findByUsername(username).orElseThrow(() -> new RuntimeException("User not found after authentication"));
-            String token = jwtUtil.generateToken(username, user.getRole());
+            String token = jwtUtil.generateToken(username, user.getRole(), user.getUserId());
             return new AuthResponse(token, username, user.getRole(), "Login successful");
         }
 

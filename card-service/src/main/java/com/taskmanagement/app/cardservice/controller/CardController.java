@@ -1,7 +1,6 @@
 package com.taskmanagement.app.cardservice.controller;
 
 import com.taskmanagement.app.cardservice.dto.*;
-import com.taskmanagement.app.cardservice.feign.AuthServiceClient;
 import com.taskmanagement.app.cardservice.service.CardService;
 import com.taskmanagement.app.cardservice.util.JWTUtil;
 import io.swagger.v3.oas.annotations.Operation;
@@ -22,7 +21,6 @@ public class CardController {
 
     @Autowired private CardService cardService;
     @Autowired private JWTUtil jwtUtil;
-    @Autowired private AuthServiceClient authServiceClient;
 
     @PostMapping
     @Operation(summary = "Create a new card in a list")
@@ -140,10 +138,17 @@ public class CardController {
     }
 
 
+    /**
+     * Extracts userId directly from JWT claims — no auth-service Feign call needed.
+     * The userId claim is embedded in the token at login time by auth-service.
+     */
     private Long userId(HttpServletRequest req) {
         String header = req.getHeader("Authorization");
         if (header == null || !header.startsWith("Bearer "))
             throw new RuntimeException("Authorization header missing");
-        return authServiceClient.getUserByUsername(jwtUtil.extractUsername(header.substring(7))).getBody().getUserId();
+        Long userId = jwtUtil.extractUserId(header.substring(7));
+        if (userId == null)
+            throw new RuntimeException("userId claim missing in JWT token");
+        return userId;
     }
 }

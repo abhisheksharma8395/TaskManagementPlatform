@@ -1,7 +1,6 @@
 package com.taskmanagement.app.notificationservice.controller;
 
 import com.taskmanagement.app.notificationservice.dto.*;
-import com.taskmanagement.app.notificationservice.feign.AuthServiceClient;
 import com.taskmanagement.app.notificationservice.service.NotificationService;
 import com.taskmanagement.app.notificationservice.util.JWTUtil;
 import io.swagger.v3.oas.annotations.Operation;
@@ -22,7 +21,6 @@ public class NotificationController {
 
     @Autowired private NotificationService notificationService;
     @Autowired private JWTUtil jwtUtil;
-    @Autowired private AuthServiceClient authServiceClient;
 
     // ── Send (called internally by other services or admin) ───────────────────
 
@@ -106,7 +104,7 @@ public class NotificationController {
         String h = req.getHeader("Authorization");
         if (h == null || !h.startsWith("Bearer "))
             throw new RuntimeException("Authorization header missing");
-        return authServiceClient.getUserByUsername(jwtUtil.extractUsername(h.substring(7))).getBody().getUserId();
+        return jwtUtil.extractUserId(h.substring(7));
     }
 
     private void assertPlatformAdmin(HttpServletRequest req) {

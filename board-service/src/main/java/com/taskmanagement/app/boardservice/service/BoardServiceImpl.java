@@ -7,8 +7,8 @@ import com.taskmanagement.app.boardservice.exception.AccessDeniedException;
 import com.taskmanagement.app.boardservice.exception.BadRequestException;
 import com.taskmanagement.app.boardservice.exception.ResourceNotFoundException;
 import com.taskmanagement.app.boardservice.feign.AuthServiceClient;
-import com.taskmanagement.app.boardservice.feign.NotificationServiceClient;
 import com.taskmanagement.app.boardservice.feign.WorkspaceServiceClient;
+import com.taskmanagement.app.boardservice.messaging.NotificationPublisher;
 import com.taskmanagement.app.boardservice.repository.BoardMemberRepository;
 import com.taskmanagement.app.boardservice.repository.BoardRepository;
 import feign.FeignException;
@@ -28,7 +28,7 @@ public class BoardServiceImpl implements BoardService {
     @Autowired private WorkspaceServiceClient workspaceServiceClient;
     @Autowired private HttpServletRequest httpServletRequest;
     @Autowired private AuthServiceClient authServiceClient;
-    @Autowired(required = false) private NotificationServiceClient notificationServiceClient;
+    @Autowired private NotificationPublisher notificationPublisher;
 
     @Override
     @Transactional
@@ -44,7 +44,6 @@ public class BoardServiceImpl implements BoardService {
         } catch (RuntimeException e) {
             throw new BadRequestException("Workspace service is unavailable. Please try again later.");
         }
-
 
         Board board = new Board();
         board.setWorkspaceId(request.getWorkspaceId());
@@ -134,26 +133,20 @@ public class BoardServiceImpl implements BoardService {
         member.setRole(request.getRole() != null ? request.getRole() : "MEMBER");
         BoardMemberResponse saved = toMemberResponse(memberRepository.save(member));
 
-        // Notifying the newly added member
-        if (notificationServiceClient != null) {
-            try {
-                String token = httpServletRequest.getHeader("Authorization");
-                UserProfileResponse newMember = authServiceClient.getUserById(request.getUserId());
-                SendNotificationRequest notif = new SendNotificationRequest();
-                notif.setRecipientId(request.getUserId());
-                notif.setRecipientEmail(null);                         // not a critical type — no email
-                notif.setType("ASSIGNMENT");
-                notif.setMessage("You were added to a board You have been added to board: " + board.getName() + " as " + member.getRole());
-                notif.setActorId(requesterId);
-                notif.setRelatedId(boardId);
-                notif.setRelatedType("BOARD");
-                notif.setTitle("You were added to a board");
-                notif.setDeepLinkUrl("/boards/" + boardId);
-                notificationServiceClient.send(notif,token);
-            } catch (Exception e) {
-                System.err.println("[BoardService] Failed to send board-member notification: " + e.getMessage());
-            }
-        }
+        // Publish notification to RabbitMQ — fire and forget, board operation already succeeded
+        UserProfileResponse newMember = authServiceClient.getUserById(request.getUserId());
+        NotificationEvent event = new NotificationEvent();
+        event.setRecipientId(request.getUserId());
+        event.setRecipientEmail(newMember != null ? newMember.getEmail() : null);
+        event.setActorId(requesterId);
+        event.setType("ASSIGNMENT");
+        event.setTitle("You were added to a board");
+        event.setMessage("You have been added to board: " + board.getName() + " as " + member.getRole());
+        event.setRelatedId(boardId);
+        event.setRelatedType("BOARD");
+        event.setDeepLinkUrl("/boards/" + boardId);
+        notificationPublisher.publish(event);
+
         return saved;
     }
 
@@ -196,7 +189,6 @@ public class BoardServiceImpl implements BoardService {
                 .map(this::toMemberResponse)
                 .collect(Collectors.toList());
     }
-
 
     private Board findOrThrow(Long boardId) {
         return boardRepository.findById(boardId).orElseThrow(() -> new ResourceNotFoundException("Board not found with id: " + boardId));

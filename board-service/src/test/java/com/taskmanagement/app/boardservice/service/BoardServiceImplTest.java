@@ -7,7 +7,6 @@ import com.taskmanagement.app.boardservice.exception.AccessDeniedException;
 import com.taskmanagement.app.boardservice.exception.BadRequestException;
 import com.taskmanagement.app.boardservice.exception.ResourceNotFoundException;
 import com.taskmanagement.app.boardservice.feign.AuthServiceClient;
-import com.taskmanagement.app.boardservice.feign.NotificationServiceClient;
 import com.taskmanagement.app.boardservice.feign.WorkspaceServiceClient;
 import com.taskmanagement.app.boardservice.repository.BoardMemberRepository;
 import com.taskmanagement.app.boardservice.repository.BoardRepository;

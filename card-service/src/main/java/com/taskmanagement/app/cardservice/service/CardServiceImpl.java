@@ -7,7 +7,7 @@ import com.taskmanagement.app.cardservice.exception.ResourceNotFoundException;
 import com.taskmanagement.app.cardservice.feign.AuthServiceClient;
 import com.taskmanagement.app.cardservice.feign.BoardServiceClient;
 import com.taskmanagement.app.cardservice.feign.ListServiceClient;
-import com.taskmanagement.app.cardservice.feign.NotificationServiceClient;
+import com.taskmanagement.app.cardservice.messaging.NotificationPublisher;
 import com.taskmanagement.app.cardservice.repository.CardRepository;
 import feign.FeignException;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,32 +22,18 @@ import java.util.stream.Collectors;
 @Service
 public class CardServiceImpl implements CardService {
 
-    @Autowired
-    private CardRepository cardRepository;
-
-    @Autowired(required = false)
-    private NotificationServiceClient notificationServiceClient;
-
-    @Autowired
-    private BoardServiceClient boardServiceClient;
-
-    @Autowired
-    private AuthServiceClient authServiceClient;
-
-    @Autowired
-    private ListServiceClient listServiceClient;
-
-    @Autowired
-    private HttpServletRequest httpServletRequest;
-
+    @Autowired private CardRepository cardRepository;
+    @Autowired private NotificationPublisher notificationPublisher; // replaces NotificationServiceClient
+    @Autowired private BoardServiceClient boardServiceClient;
+    @Autowired private AuthServiceClient authServiceClient;
+    @Autowired private ListServiceClient listServiceClient;
+    @Autowired private HttpServletRequest httpServletRequest;
 
     @Override
     @Transactional
     public CardResponse createCard(CreateCardRequest request, Long requesterId) {
-        // Validate board exists
         validateBoard(request.getBoardId());
 
-        // Validate list exists and belongs to the specified board
         ListResponse list = validateList(request.getListId());
         if (!list.getBoardId().equals(request.getBoardId())) {
             throw new BadRequestException(
@@ -81,7 +67,6 @@ public class CardServiceImpl implements CardService {
 
     @Override
     public List<CardResponse> getCardsByList(Long listId) {
-        // Validate list exists before querying cards
         validateList(listId);
         return cardRepository.findByListIdAndIsArchived(listId, false)
                 .stream().map(this::toResponse).collect(Collectors.toList());
@@ -89,7 +74,6 @@ public class CardServiceImpl implements CardService {
 
     @Override
     public List<CardResponse> getCardsByBoard(Long boardId) {
-        // Validate board exists before querying cards
         validateBoard(boardId);
         return cardRepository.findByBoardIdAndIsArchived(boardId, false)
                 .stream().map(this::toResponse).collect(Collectors.toList());
@@ -103,7 +87,6 @@ public class CardServiceImpl implements CardService {
 
     @Override
     public List<CardResponse> getArchivedCards(Long boardId) {
-        // Validate board exists before querying archived cards
         validateBoard(boardId);
         return cardRepository.findByBoardIdAndIsArchived(boardId, true)
                 .stream().map(this::toResponse).collect(Collectors.toList());
@@ -128,16 +111,13 @@ public class CardServiceImpl implements CardService {
         return toResponse(cardRepository.save(card));
     }
 
-
     @Override
     @Transactional
     public CardResponse moveCard(Long cardId, MoveCardRequest request) {
         Card card = findOrThrow(cardId);
-
-        // Validate target list exists and update boardId accordingly
         ListResponse targetList = validateList(request.getTargetListId());
         card.setListId(request.getTargetListId());
-        card.setBoardId(targetList.getBoardId());   // keep boardId in sync if moving across boards
+        card.setBoardId(targetList.getBoardId());
 
         if (request.getPosition() != null) {
             card.setPosition(request.getPosition());
@@ -152,9 +132,7 @@ public class CardServiceImpl implements CardService {
     @Override
     @Transactional
     public void reorderCards(Long listId, ReorderCardsRequest request) {
-        // Validate list exists before reordering
         validateList(listId);
-
         List<Long> ids = request.getOrderedCardIds();
         for (int i = 0; i < ids.size(); i++) {
             Card card = findOrThrow(ids.get(i));
@@ -173,27 +151,22 @@ public class CardServiceImpl implements CardService {
         card.setAssigneeId(request.getAssigneeId());
         CardResponse saved = toResponse(cardRepository.save(card));
 
-        if (notificationServiceClient != null
-                && request.getAssigneeId() != null
+        // Notify the newly assigned user — publish to RabbitMQ
+        if (request.getAssigneeId() != null
                 && !request.getAssigneeId().equals(previousAssigneeId)) {
-            try {
-                String token = getToken();
-                UserProfileResponse assignee = authServiceClient.getUserById(request.getAssigneeId());
-                if (assignee != null) {
-                    SendNotificationRequest notif = new SendNotificationRequest();
-                    notif.setRecipientId(assignee.getUserId());
-                    notif.setRecipientEmail(assignee.getEmail());
-                    notif.setActorId(null);
-                    notif.setType("ASSIGNMENT");
-                    notif.setTitle("You have been assigned a card");
-                    notif.setMessage("You have been assigned to card: " + card.getTitle());
-                    notif.setRelatedId(cardId);
-                    notif.setRelatedType("CARD");
-                    notif.setDeepLinkUrl("/cards/" + cardId);
-                    notificationServiceClient.send(notif, token);
-                }
-            } catch (Exception e) {
-                System.err.println("[CardService] Failed to send assignment notification: " + e.getMessage());
+            UserProfileResponse assignee = authServiceClient.getUserById(request.getAssigneeId());
+            if (assignee != null) {
+                NotificationEvent event = new NotificationEvent();
+                event.setRecipientId(assignee.getUserId());
+                event.setRecipientEmail(assignee.getEmail()); // email sent for ASSIGNMENT type
+                event.setActorId(null);
+                event.setType("ASSIGNMENT");
+                event.setTitle("You have been assigned a card");
+                event.setMessage("You have been assigned to card: " + card.getTitle());
+                event.setRelatedId(cardId);
+                event.setRelatedType("CARD");
+                event.setDeepLinkUrl("/cards/" + cardId);
+                notificationPublisher.publish(event);
             }
         }
         return saved;
@@ -214,32 +187,25 @@ public class CardServiceImpl implements CardService {
         card.setStatus(request.getStatus());
         CardResponse saved = toResponse(cardRepository.save(card));
 
-        if (notificationServiceClient != null
-                && "DONE".equalsIgnoreCase(request.getStatus())
-                && card.getAssigneeId() != null) {
-            try {
-                String token = getToken();
-                UserProfileResponse assignee = authServiceClient.getUserById(card.getAssigneeId());
-                if (assignee != null) {
-                    SendNotificationRequest notif = new SendNotificationRequest();
-                    notif.setRecipientId(assignee.getUserId());
-                    notif.setRecipientEmail(null);
-                    notif.setActorId(null);
-                    notif.setType("MOVE");
-                    notif.setTitle("Card moved to Done");
-                    notif.setMessage("Card \"" + card.getTitle() + "\" has been moved to Done.");
-                    notif.setRelatedId(card.getCardId());
-                    notif.setRelatedType("CARD");
-                    notif.setDeepLinkUrl("/cards/" + card.getCardId());
-                    notificationServiceClient.send(notif, token);
-                }
-            } catch (Exception e) {
-                System.err.println("[CardService] Failed to send status notification: " + e.getMessage());
+        // Notify assignee when card is moved to Done — publish to RabbitMQ
+        if ("DONE".equalsIgnoreCase(request.getStatus()) && card.getAssigneeId() != null) {
+            UserProfileResponse assignee = authServiceClient.getUserById(card.getAssigneeId());
+            if (assignee != null) {
+                NotificationEvent event = new NotificationEvent();
+                event.setRecipientId(assignee.getUserId());
+                event.setRecipientEmail(null); // MOVE type — no email, only in-app
+                event.setActorId(null);
+                event.setType("MOVE");
+                event.setTitle("Card moved to Done");
+                event.setMessage("Card \"" + card.getTitle() + "\" has been moved to Done.");
+                event.setRelatedId(card.getCardId());
+                event.setRelatedType("CARD");
+                event.setDeepLinkUrl("/cards/" + card.getCardId());
+                notificationPublisher.publish(event);
             }
         }
         return saved;
     }
-
 
     @Override
     @Transactional
@@ -266,8 +232,6 @@ public class CardServiceImpl implements CardService {
         cardRepository.delete(card);
     }
 
-    // ── Overdue ───────────────────────────────────────────────────────────────
-
     @Override
     public List<CardResponse> getOverdueCards() {
         return cardRepository.findOverdueCards(LocalDate.now())
@@ -276,13 +240,10 @@ public class CardServiceImpl implements CardService {
 
     @Override
     public List<CardResponse> getOverdueCardsByBoard(Long boardId) {
-        // Validate board exists before querying overdue cards
         validateBoard(boardId);
         return cardRepository.findOverdueCardsByBoard(boardId, LocalDate.now())
                 .stream().map(this::toResponse).collect(Collectors.toList());
     }
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
 
     private Card findOrThrow(Long cardId) {
         return cardRepository.findById(cardId)
@@ -300,9 +261,7 @@ public class CardServiceImpl implements CardService {
     private void validateBoard(Long boardId) {
         try {
             BoardResponse board = boardServiceClient.getById(boardId, getToken()).getBody();
-            if (board == null) {
-                throw new ResourceNotFoundException("Board not found with id: " + boardId);
-            }
+            if (board == null) throw new ResourceNotFoundException("Board not found with id: " + boardId);
         } catch (FeignException.NotFound e) {
             throw new ResourceNotFoundException("Board not found with id: " + boardId);
         }
@@ -311,9 +270,7 @@ public class CardServiceImpl implements CardService {
     private ListResponse validateList(Long listId) {
         try {
             ListResponse list = listServiceClient.getById(listId, getToken()).getBody();
-            if (list == null) {
-                throw new ResourceNotFoundException("List not found with id: " + listId);
-            }
+            if (list == null) throw new ResourceNotFoundException("List not found with id: " + listId);
             return list;
         } catch (FeignException.NotFound e) {
             throw new ResourceNotFoundException("List not found with id: " + listId);

@@ -24,10 +24,6 @@ public class WorkspaceController {
     @Autowired
     private JWTUtil jwtUtil;
 
-    @Autowired
-    private AuthServiceClient authServiceClient;
-
-
     @PostMapping
     public ResponseEntity<WorkspaceResponse> createWorkspace(@Valid @RequestBody CreateWorkspaceRequest request, HttpServletRequest httpRequest) {
         Long ownerId = extractUserId(httpRequest);
@@ -143,13 +139,7 @@ public class WorkspaceController {
             throw new RuntimeException("Authorization header missing or malformed");
         }
         String token = header.substring(7);
-        String username = jwtUtil.extractUsername(token);  // username IS in the token
-        ResponseEntity<UserProfileResponse> response = authServiceClient.getUserByUsername(username);
-        if (response == null || response.getBody() == null || response.getBody().getUserId() == null) {
-            throw new WorkspaceOperationException("Auth service is unavailable. Please try again later.");
-        }
-        return response.getBody().getUserId();
-
+        return jwtUtil.extractUserId(token);  // userid IS in the token
     }
 
     private void assertPlatformAdmin(HttpServletRequest request) {

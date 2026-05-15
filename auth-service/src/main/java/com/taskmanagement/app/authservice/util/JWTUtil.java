@@ -25,9 +25,10 @@ public class JWTUtil {
     @Value("${jwt.expiration}")
     private long expiration;
 
-    public String generateToken(String userName, String role) {
+    public String generateToken(String userName, String role, Long userId) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("role", role);
+        claims.put("userId", userId);
 
         return Jwts.builder()
                 .claims()
@@ -77,5 +78,9 @@ public class JWTUtil {
     public boolean validateToken(String token, UserDetails userDetails) {
         final String username = extractUsername(token);
         return username.equals(userDetails.getUsername()) && !isTokenExpired(token);
+    }
+
+    public boolean validateToken(String token) {
+        return !isTokenExpired(token);
     }
 }

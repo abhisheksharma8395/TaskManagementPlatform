@@ -1,7 +1,6 @@
 package com.taskmanagement.app.apigateway.filter;
 
 import io.github.resilience4j.ratelimiter.RateLimiter;
-import io.github.resilience4j.ratelimiter.RequestNotPermitted;
 import jakarta.servlet.*;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -32,10 +31,9 @@ public class RateLimiterFilter implements Filter {
                 ? authRateLimiter
                 : defaultRateLimiter;
 
-        try {
-            RateLimiter.waitForPermission(limiter);
+        if (limiter.acquirePermission()) {
             chain.doFilter(request, response);
-        } catch (RequestNotPermitted e) {
+        } else {
             httpResponse.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
             httpResponse.setContentType("application/json");
             httpResponse.getWriter().write("""

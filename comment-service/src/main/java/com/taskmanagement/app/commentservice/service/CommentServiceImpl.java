@@ -7,7 +7,7 @@ import com.taskmanagement.app.commentservice.exception.AccessDeniedException;
 import com.taskmanagement.app.commentservice.exception.BadRequestException;
 import com.taskmanagement.app.commentservice.exception.ResourceNotFoundException;
 import com.taskmanagement.app.commentservice.feign.CardServiceClient;
-import com.taskmanagement.app.commentservice.feign.NotificationServiceClient;
+import com.taskmanagement.app.commentservice.messaging.NotificationPublisher;
 import com.taskmanagement.app.commentservice.repository.AttachmentRepository;
 import com.taskmanagement.app.commentservice.repository.CommentRepository;
 import feign.FeignException;
@@ -19,7 +19,6 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -28,7 +27,7 @@ public class CommentServiceImpl implements CommentService {
     @Autowired private CommentRepository commentRepository;
     @Autowired private AttachmentRepository attachmentRepository;
     @Autowired private CardServiceClient cardServiceClient;
-    @Autowired(required = false) private NotificationServiceClient notificationServiceClient;
+    @Autowired private NotificationPublisher notificationPublisher;
     @Autowired private S3Service s3Service;
 
     private static final List<String> ALLOWED_TYPES = List.of(
@@ -48,16 +47,12 @@ public class CommentServiceImpl implements CommentService {
         if (request.getParentCommentId() != null) {
             Comment parent = commentRepository.findById(request.getParentCommentId())
                     .orElseThrow(() -> new ResourceNotFoundException("Parent comment not found: " + request.getParentCommentId()));
-
-            if (parent.getParentCommentId() != null) {
+            if (parent.getParentCommentId() != null)
                 throw new BadRequestException("Cannot reply to a reply — only one level of threading is supported");
-            }
-            if (!parent.getCardId().equals(request.getCardId())) {
+            if (!parent.getCardId().equals(request.getCardId()))
                 throw new BadRequestException("Parent comment does not belong to card: " + request.getCardId());
-            }
-            if (parent.isDeleted()) {
+            if (parent.isDeleted())
                 throw new BadRequestException("Cannot reply to a deleted comment");
-            }
         }
 
         Comment comment = new Comment();
@@ -67,41 +62,34 @@ public class CommentServiceImpl implements CommentService {
         comment.setParentCommentId(request.getParentCommentId());
         Comment saved = commentRepository.save(comment);
 
-        // Send notification to card assignee if they are not the comment author
-        if (notificationServiceClient != null
-                && card.getAssigneeId() != null
-                && !card.getAssigneeId().equals(authorId)) {
-            try {
-                boolean isMention = request.getContent() != null
-                        && request.getContent().matches(".*@\\S+.*");
+        // Publish notification to RabbitMQ — notify the card assignee
+        if (card.getAssigneeId() != null && !card.getAssigneeId().equals(authorId)) {
+            boolean isMention = request.getContent() != null
+                    && request.getContent().matches(".*@\\S+.*");
 
-                String truncatedContent = request.getContent() != null && request.getContent().length() > 100
-                        ? request.getContent().substring(0, 100) + "..."
-                        : request.getContent();
+            String truncatedContent = request.getContent() != null && request.getContent().length() > 100
+                    ? request.getContent().substring(0, 100) + "..."
+                    : request.getContent();
 
-                SendNotificationRequest notif = new SendNotificationRequest();
-                notif.setRecipientId(card.getAssigneeId());
-                notif.setRecipientEmail(null);
-                notif.setActorId(authorId);
-                notif.setType(isMention ? "MENTION" : "COMMENT");
-                notif.setTitle(isMention ? "You were mentioned in a comment" : "New comment on your card");
-                notif.setMessage(truncatedContent);
-                notif.setRelatedId(request.getCardId());
-                notif.setRelatedType("CARD");
-                notif.setDeepLinkUrl("/cards/" + request.getCardId());
-
-                notificationServiceClient.send(notif, token);
-            } catch (Exception e) {
-                System.err.println("[CommentService] Failed to send comment notification: " + e.getMessage());
-            }
+            NotificationEvent event = new NotificationEvent();
+            event.setRecipientId(card.getAssigneeId());
+            event.setRecipientEmail(null); // COMMENT/MENTION — in-app only, no email
+            event.setActorId(authorId);
+            event.setType(isMention ? "MENTION" : "COMMENT");
+            event.setTitle(isMention ? "You were mentioned in a comment" : "New comment on your card");
+            event.setMessage(truncatedContent);
+            event.setRelatedId(request.getCardId());
+            event.setRelatedType("CARD");
+            event.setDeepLinkUrl("/cards/" + request.getCardId());
+            notificationPublisher.publish(event);
         }
 
         return toResponse(saved, false);
     }
 
     @Override
-    public List<CommentResponse> getCommentsByCard(Long cardId , String token) {
-        fetchCardOrThrow(cardId , token);
+    public List<CommentResponse> getCommentsByCard(Long cardId, String token) {
+        fetchCardOrThrow(cardId, token);
         return commentRepository
                 .findByCardIdAndIsDeletedFalseAndParentCommentIdIsNullOrderByCreatedAtAsc(cardId)
                 .stream()
@@ -128,12 +116,9 @@ public class CommentServiceImpl implements CommentService {
     @Transactional
     public CommentResponse updateComment(Long commentId, UpdateCommentRequest request, Long requesterId) {
         Comment comment = findCommentOrThrow(commentId);
-        if (comment.isDeleted()) {
-            throw new BadRequestException("Cannot edit a deleted comment");
-        }
-        if (!comment.getAuthorId().equals(requesterId)) {
+        if (comment.isDeleted()) throw new BadRequestException("Cannot edit a deleted comment");
+        if (!comment.getAuthorId().equals(requesterId))
             throw new AccessDeniedException("You can only edit your own comments");
-        }
         comment.setContent(request.getContent());
         return toResponse(commentRepository.save(comment), false);
     }
@@ -142,62 +127,44 @@ public class CommentServiceImpl implements CommentService {
     @Transactional
     public void deleteComment(Long commentId, Long requesterId) {
         Comment comment = findCommentOrThrow(commentId);
-        if (!comment.getAuthorId().equals(requesterId)) {
+        if (!comment.getAuthorId().equals(requesterId))
             throw new AccessDeniedException("You can only delete your own comments");
-        }
-        if (comment.isDeleted()) {
-            throw new BadRequestException("Comment is already deleted");
-        }
+        if (comment.isDeleted()) throw new BadRequestException("Comment is already deleted");
         comment.setDeleted(true);
         comment.setContent("[deleted]");
         commentRepository.save(comment);
     }
 
     @Override
-    public long getCommentCount(Long cardId , String token) {
-        fetchCardOrThrow(cardId , token);
+    public long getCommentCount(Long cardId, String token) {
+        fetchCardOrThrow(cardId, token);
         return commentRepository.countByCardIdAndIsDeletedFalse(cardId);
     }
-
 
     @Override
     @Transactional
     public AttachmentResponse addAttachment(AddAttachmentRequest request, Long uploaderId, String token) throws IOException {
-
-        // Validate card first — before uploading
         CardResponse card = fetchCardOrThrow(request.getCardId(), token);
-
-        if (card.isArchived()) {
-            throw new BadRequestException(
-                    "Cannot add an attachment to archived card: " + request.getCardId());
-        }
+        if (card.isArchived())
+            throw new BadRequestException("Cannot add an attachment to archived card: " + request.getCardId());
 
         MultipartFile file = request.getFile();
-
-        // Validate file type before uploading
         String fileType = file.getContentType();
-        if (!ALLOWED_TYPES.contains(fileType)) {
+        if (!ALLOWED_TYPES.contains(fileType))
             throw new BadRequestException(fileType + " File Type is not allowed");
-        }
 
         long sizeKb = file.getSize() / 1024;
-        if (sizeKb > 10240) {
-            throw new BadRequestException(
-                    "File size can't be more than 10 mb. Your current file size is: "
-                            + sizeKb / 1024 + " mb");
-        }
+        if (sizeKb > 10240)
+            throw new BadRequestException("File size can't be more than 10 mb. Your current file size is: " + sizeKb / 1024 + " mb");
 
-        // Upload to S3 — get back the key
         String fileKey = s3Service.uploadFile(file);
 
-        // Check duplicate by fileName for this card
         boolean duplicate = attachmentRepository.findByCardId(request.getCardId())
                 .stream()
                 .anyMatch(a -> a.getFileName().equals(file.getOriginalFilename()));
         if (duplicate) {
-            s3Service.deleteFile(fileKey); // clean up uploaded file
-            throw new BadRequestException(
-                    "This file is already attached to card: " + request.getCardId());
+            s3Service.deleteFile(fileKey);
+            throw new BadRequestException("This file is already attached to card: " + request.getCardId());
         }
 
         Attachment attachment = new Attachment();
@@ -212,8 +179,8 @@ public class CommentServiceImpl implements CommentService {
     }
 
     @Override
-    public List<AttachmentResponse> getAttachmentsByCard(Long cardId , String token) {
-        fetchCardOrThrow(cardId , token);
+    public List<AttachmentResponse> getAttachmentsByCard(Long cardId, String token) {
+        fetchCardOrThrow(cardId, token);
         return attachmentRepository.findByCardId(cardId)
                 .stream()
                 .map(this::toAttachmentResponse)
@@ -224,35 +191,28 @@ public class CommentServiceImpl implements CommentService {
     @Transactional
     public void deleteAttachment(Long attachmentId, Long uploaderId) {
         Attachment attachment = attachmentRepository.findById(attachmentId)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Attachment not found: " + attachmentId));
-
-        if (!attachment.getUploaderId().equals(uploaderId)) {
+                .orElseThrow(() -> new ResourceNotFoundException("Attachment not found: " + attachmentId));
+        if (!attachment.getUploaderId().equals(uploaderId))
             throw new AccessDeniedException("You can only delete your own attachments");
-        }
-
-        s3Service.deleteFile(attachment.getFileKey()); // delete from S3
+        s3Service.deleteFile(attachment.getFileKey());
         attachmentRepository.deleteById(attachmentId);
     }
 
-    private CardResponse fetchCardOrThrow(Long cardId , String token) {
+    private CardResponse fetchCardOrThrow(Long cardId, String token) {
         try {
-            CardResponse card = cardServiceClient.getCardById(cardId,token).getBody();
-            if (card == null) {
-                throw new ResourceNotFoundException("Card not found: " + cardId);
-            }
+            CardResponse card = cardServiceClient.getCardById(cardId, token).getBody();
+            if (card == null) throw new ResourceNotFoundException("Card not found: " + cardId);
             return card;
         } catch (FeignException.NotFound e) {
             throw new ResourceNotFoundException("Card not found: " + cardId);
         } catch (FeignException e) {
-            throw new BadRequestException(
-                    "Could not verify card " + cardId + " — card-service error: " + e.status());
+            throw new BadRequestException("Could not verify card " + cardId + " — card-service error: " + e.status());
         }
     }
+
     private Comment findCommentOrThrow(Long commentId) {
         return commentRepository.findById(commentId)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Comment not found: " + commentId));
+                .orElseThrow(() -> new ResourceNotFoundException("Comment not found: " + commentId));
     }
 
     private CommentResponse toResponse(Comment c, boolean loadReplies) {
@@ -280,8 +240,6 @@ public class CommentServiceImpl implements CommentService {
         }
         return r;
     }
-
-
 
     private AttachmentResponse toAttachmentResponse(Attachment attachment) {
         AttachmentResponse response = new AttachmentResponse();

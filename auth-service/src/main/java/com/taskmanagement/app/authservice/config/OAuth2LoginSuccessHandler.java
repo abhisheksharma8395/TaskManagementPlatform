@@ -39,7 +39,7 @@ public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
                     u.setActive(true);
                     return userRepository.save(u);
                 });
-        String token = jwtUtil.generateToken(user.getUsername(), user.getRole());
+        String token = jwtUtil.generateToken(user.getUsername(), user.getRole(), user.getUserId());
         response.sendRedirect("http://localhost:5173/oauth-success?token=" + token);
     }
 }

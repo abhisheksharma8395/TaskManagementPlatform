@@ -22,7 +22,6 @@ public class BoardController {
 
     @Autowired private BoardService boardService;
     @Autowired private JWTUtil jwtUtil;
-    @Autowired private AuthServiceClient authServiceClient;
 
     @PostMapping
     @Operation(summary = "Create a new board")
@@ -107,8 +106,8 @@ public class BoardController {
             throw new RuntimeException("Authorization header missing or malformed");
         }
         String token = header.substring(7);
-        String username = jwtUtil.extractUsername(token);  // username IS in the token
-        return authServiceClient.getUserByUsername(username).getBody().getUserId();  // fetch userId from auth-service
+        Long userId = jwtUtil.extractUserId(token);  // username IS in the token
+        return userId;
     }
 
     private void assertPlatformAdmin(HttpServletRequest request) {

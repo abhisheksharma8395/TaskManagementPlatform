@@ -25,14 +25,6 @@ public class Notification {
     /** The user who triggered the action (null for system-generated) */
     private Long actorId;
 
-    /**
-     * ASSIGNMENT  – card assigned to recipient
-     * MENTION     – recipient @mentioned in a comment
-     * DUE_DATE    – card due date approaching
-     * COMMENT     – reply on a card the recipient watches
-     * MOVE        – card moved to Done
-     * BROADCAST   – admin platform-wide announcement
-     */
 
     @Column(nullable = false)
     private String type;

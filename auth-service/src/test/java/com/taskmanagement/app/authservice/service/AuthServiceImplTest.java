@@ -162,7 +162,7 @@ class AuthServiceImplTest {
         when(auth.isAuthenticated()).thenReturn(true);
         when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class))).thenReturn(auth);
         when(userRepository.findByUsername("john_doe")).thenReturn(Optional.of(sampleUser));
-        when(jwtUtil.generateToken("john_doe", "USER")).thenReturn("mock.jwt.token");
+        when(jwtUtil.generateToken("john_doe", "USER", 1L)).thenReturn("mock.jwt.token");
 
         AuthResponse response = authService.login("john_doe", "password");
 
