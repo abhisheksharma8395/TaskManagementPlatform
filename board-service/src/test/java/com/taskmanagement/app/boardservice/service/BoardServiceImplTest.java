@@ -8,6 +8,7 @@ import com.taskmanagement.app.boardservice.exception.BadRequestException;
 import com.taskmanagement.app.boardservice.exception.ResourceNotFoundException;
 import com.taskmanagement.app.boardservice.feign.AuthServiceClient;
 import com.taskmanagement.app.boardservice.feign.WorkspaceServiceClient;
+import com.taskmanagement.app.boardservice.messaging.NotificationPublisher;
 import com.taskmanagement.app.boardservice.repository.BoardMemberRepository;
 import com.taskmanagement.app.boardservice.repository.BoardRepository;
 import feign.FeignException;
@@ -42,7 +43,7 @@ class BoardServiceImplTest {
     @Mock
     private AuthServiceClient authServiceClient;
     @Mock
-    private NotificationServiceClient notificationServiceClient;
+    private NotificationPublisher notificationPublisher;
 
     @InjectMocks
     private BoardServiceImpl boardService;
@@ -76,7 +77,6 @@ class BoardServiceImplTest {
         adminMember.setRole("ADMIN");
     }
 
-    // ─── createBoard ──────────────────────────────────────────────────────────
 
     @Test
     void createBoard_happyPath_returnsResponse() {

@@ -1,15 +1,16 @@
 package com.taskmanagement.app.apigateway.filter;
 
 import io.github.resilience4j.ratelimiter.RateLimiter;
-import jakarta.servlet.*;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
+import io.github.resilience4j.ratelimiter.RequestNotPermitted;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
-import java.io.IOException;
+import org.springframework.web.servlet.function.HandlerFilterFunction;
+import org.springframework.web.servlet.function.ServerRequest;
+import org.springframework.web.servlet.function.ServerResponse;
+
 
 @Component
-public class RateLimiterFilter implements Filter {
+public class RateLimiterFilter {
 
     private final RateLimiter defaultRateLimiter;
     private final RateLimiter authRateLimiter;
@@ -19,30 +20,24 @@ public class RateLimiterFilter implements Filter {
         this.authRateLimiter = authRateLimiter;
     }
 
-    @Override
-    public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
-            throws IOException, ServletException {
+    public HandlerFilterFunction<ServerResponse, ServerResponse> toHandlerFilter() {
+        return (request, next) -> {
+            RateLimiter limiter = isAuthPath(request) ? authRateLimiter : defaultRateLimiter;
+            try {
+                return RateLimiter.decorateCheckedSupplier(limiter, () -> next.handle(request)).get();
+            } catch (RequestNotPermitted e) {
+                return ServerResponse.status(HttpStatus.TOO_MANY_REQUESTS)
+                        .header("Retry-After", "1")
+                        .body("{\"status\":429,\"error\":\"Too Many Requests\","
+                                + "\"message\":\"Rate limit exceeded. Please slow down.\"}");
+            } catch (Throwable t) {
+                if (t instanceof RuntimeException re) throw re;
+                throw new RuntimeException(t);
+            }
+        };
+    }
 
-        HttpServletRequest httpRequest = (HttpServletRequest) request;
-        HttpServletResponse httpResponse = (HttpServletResponse) response;
-        String path = httpRequest.getRequestURI();
-
-        RateLimiter limiter = path.startsWith("/auth-service")
-                ? authRateLimiter
-                : defaultRateLimiter;
-
-        if (limiter.acquirePermission()) {
-            chain.doFilter(request, response);
-        } else {
-            httpResponse.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
-            httpResponse.setContentType("application/json");
-            httpResponse.getWriter().write("""
-                    {
-                        "status": 429,
-                        "error": "Too Many Requests",
-                        "message": "Rate limit exceeded. Please slow down."
-                    }
-                    """);
-        }
+    private boolean isAuthPath(ServerRequest request) {
+        return request.path().startsWith("/auth-service");
     }
 }

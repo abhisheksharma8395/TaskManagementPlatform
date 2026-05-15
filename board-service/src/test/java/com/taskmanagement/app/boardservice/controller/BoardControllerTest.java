@@ -43,7 +43,8 @@ class BoardControllerTest {
 
     @BeforeEach
     void setupMocks() {
-        when(jwtUtil.extractUsername(anyString())).thenReturn("john_doe");
+        when(jwtUtil.extractUserId(anyString())).thenReturn(1L);
+        when(jwtUtil.extractRole(anyString())).thenReturn("USER");
         UserProfileResponse profile = new UserProfileResponse(1L, "john_doe", "John Doe",
                 "john@example.com", "USER", null, true);
         when(authServiceClient.getUserByUsername("john_doe")).thenReturn(ResponseEntity.ok(profile));

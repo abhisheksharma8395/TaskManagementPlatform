@@ -39,10 +39,8 @@ class CardServiceImplTest {
     private BoardServiceClient boardServiceClient;
     @Mock
     private ListServiceClient listServiceClient;
-    @Mock
-    private AuthServiceClient authServiceClient;
-    @Mock
-    private NotificationServiceClient notificationServiceClient;
+
+
     @Mock
     private HttpServletRequest httpServletRequest;
 
