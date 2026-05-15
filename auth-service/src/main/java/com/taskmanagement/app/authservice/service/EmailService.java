@@ -15,13 +15,13 @@ public class EmailService {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom("abhiparashar8630@gmail.com");
         message.setTo(toEmail);
-        message.setSubject("Password Reset OTP - Task Management Platform");
+        message.setSubject("Password Reset OTP - FlowBoard");
         message.setText(
                 "Hello,\n\n" +
                         "Your OTP for password reset is: " + otp + "\n\n" +
                         "This OTP is valid for 10 minutes.\n" +
                         "If you did not request this, please ignore this email.\n\n" +
-                        "regards,\nTask Management Platform"
+                        "regards,\nFlowBoard"
         );
         mailSender.send(message);
     }
