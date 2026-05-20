@@ -16,7 +16,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByEmail(String email);
     boolean existsByUsername(String username);
     List<User> findAllByRole(String role);
-    @Query(value = "select * from users where full_name = :fullName",nativeQuery = true)
+    @Query(value = "SELECT * FROM users WHERE LOWER(full_name) LIKE LOWER(CONCAT('%', :fullName, '%'))", nativeQuery = true)
     List<User> searchByFullName(@Param("fullName") String fullName);
     void deleteByUserId(Long userId);
 }

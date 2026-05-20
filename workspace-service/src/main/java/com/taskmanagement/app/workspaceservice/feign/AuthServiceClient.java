@@ -18,4 +18,6 @@ public interface AuthServiceClient {
     @GetMapping("/user/username/{username}")
     ResponseEntity<UserProfileResponse> getUserByUsername(@PathVariable String username);
 
+    @GetMapping("/user/email/{email}")
+    ResponseEntity<UserProfileResponse> getUserByEmail(@PathVariable String email);
 }

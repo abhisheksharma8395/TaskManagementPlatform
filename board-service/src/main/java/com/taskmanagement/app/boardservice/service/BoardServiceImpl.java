@@ -133,7 +133,7 @@ public class BoardServiceImpl implements BoardService {
         member.setRole(request.getRole() != null ? request.getRole() : "MEMBER");
         BoardMemberResponse saved = toMemberResponse(memberRepository.save(member));
 
-        // Publish notification to RabbitMQ — fire and forget, board operation already succeeded
+        // Publish notification to RabbitMQ
         UserProfileResponse newMember = authServiceClient.getUserById(request.getUserId());
         NotificationEvent event = new NotificationEvent();
         event.setRecipientId(request.getUserId());

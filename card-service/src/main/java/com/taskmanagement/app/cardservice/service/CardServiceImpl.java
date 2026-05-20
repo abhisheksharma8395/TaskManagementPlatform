@@ -23,7 +23,7 @@ import java.util.stream.Collectors;
 public class CardServiceImpl implements CardService {
 
     @Autowired private CardRepository cardRepository;
-    @Autowired private NotificationPublisher notificationPublisher; // replaces NotificationServiceClient
+    @Autowired private NotificationPublisher notificationPublisher;
     @Autowired private BoardServiceClient boardServiceClient;
     @Autowired private AuthServiceClient authServiceClient;
     @Autowired private ListServiceClient listServiceClient;
@@ -105,7 +105,30 @@ public class CardServiceImpl implements CardService {
         if (request.getStatus() != null)      card.setStatus(request.getStatus());
         if (request.getDueDate() != null)     card.setDueDate(request.getDueDate());
         if (request.getStartDate() != null)   card.setStartDate(request.getStartDate());
-        if (request.getAssigneeId() != null)  card.setAssigneeId(request.getAssigneeId());
+        if (request.getAssigneeId() != null) {
+            Long previousAssigneeId = card.getAssigneeId();
+            if (!request.getAssigneeId().equals(previousAssigneeId)) {
+                card.setAssigneeId(request.getAssigneeId());
+                try {
+                    UserProfileResponse user = authServiceClient.getUserById(request.getAssigneeId());
+                    if (user != null) {
+                        NotificationEvent event = new NotificationEvent();
+                        event.setRecipientId(user.getUserId());
+                        event.setRecipientEmail(user.getEmail());
+                        event.setActorId(requesterId);
+                        event.setType("ASSIGNMENT");
+                        event.setTitle("You have been assigned a card");
+                        event.setMessage("You have been assigned to card: " + card.getTitle());
+                        event.setRelatedId(cardId);
+                        event.setRelatedType("CARD");
+                        event.setDeepLinkUrl("/cards/" + cardId);
+                        notificationPublisher.publish(event);
+                    }
+                } catch (Exception e) {
+                    // Suppress to ensure card update still succeeds even if auth-service or RabbitMQ is down
+                }
+            }
+        }
         if (request.getCoverColor() != null)  card.setCoverColor(request.getCoverColor());
 
         return toResponse(cardRepository.save(card));
@@ -148,26 +171,54 @@ public class CardServiceImpl implements CardService {
     public CardResponse setAssignee(Long cardId, SetAssigneeRequest request) {
         Card card = findOrThrow(cardId);
         Long previousAssigneeId = card.getAssigneeId();
-        card.setAssigneeId(request.getAssigneeId());
+
+        if (request.getFullName() == null || request.getFullName().isBlank()) {
+            card.setAssigneeId(null);
+            CardResponse saved = toResponse(cardRepository.save(card));
+            return saved;
+        }
+
+        List<UserProfileResponse> users;
+        try {
+            users = authServiceClient.searchByName(request.getFullName()).getBody();
+        } catch (FeignException.NotFound e) {
+            throw new BadRequestException("User with full name " + request.getFullName() + " does not exist");
+        } catch (FeignException e) {
+            throw new BadRequestException("Could not verify user existence: " + e.getMessage());
+        }
+
+        if (users == null || users.isEmpty()) {
+            throw new BadRequestException("User with full name " + request.getFullName() + " does not exist");
+        }
+
+        UserProfileResponse user = null;
+        if (request.getEmail() != null && !request.getEmail().isBlank()) {
+            user = users.stream()
+                    .filter(u -> request.getEmail().equalsIgnoreCase(u.getEmail()))
+                    .findFirst()
+                    .orElse(null);
+        }
+
+        if (user == null) {
+            user = users.get(0);
+        }
+
+        card.setAssigneeId(user.getUserId());
         CardResponse saved = toResponse(cardRepository.save(card));
 
         // Notify the newly assigned user — publish to RabbitMQ
-        if (request.getAssigneeId() != null
-                && !request.getAssigneeId().equals(previousAssigneeId)) {
-            UserProfileResponse assignee = authServiceClient.getUserById(request.getAssigneeId());
-            if (assignee != null) {
-                NotificationEvent event = new NotificationEvent();
-                event.setRecipientId(assignee.getUserId());
-                event.setRecipientEmail(assignee.getEmail()); // email sent for ASSIGNMENT type
-                event.setActorId(null);
-                event.setType("ASSIGNMENT");
-                event.setTitle("You have been assigned a card");
-                event.setMessage("You have been assigned to card: " + card.getTitle());
-                event.setRelatedId(cardId);
-                event.setRelatedType("CARD");
-                event.setDeepLinkUrl("/cards/" + cardId);
-                notificationPublisher.publish(event);
-            }
+        if (!user.getUserId().equals(previousAssigneeId)) {
+            NotificationEvent event = new NotificationEvent();
+            event.setRecipientId(user.getUserId());
+            event.setRecipientEmail(user.getEmail()); // email sent for ASSIGNMENT type
+            event.setActorId(null);
+            event.setType("ASSIGNMENT");
+            event.setTitle("You have been assigned a card");
+            event.setMessage("You have been assigned to card: " + card.getTitle());
+            event.setRelatedId(cardId);
+            event.setRelatedType("CARD");
+            event.setDeepLinkUrl("/cards/" + cardId);
+            notificationPublisher.publish(event);
         }
         return saved;
     }

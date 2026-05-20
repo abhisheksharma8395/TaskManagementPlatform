@@ -3,5 +3,6 @@ import lombok.Data;
 
 @Data
 public class SetAssigneeRequest {
-    private Long assigneeId;   // null = unassign
+    private String fullName;   // null = unassign
+    private String email;      // unique email to resolve collisions
 }

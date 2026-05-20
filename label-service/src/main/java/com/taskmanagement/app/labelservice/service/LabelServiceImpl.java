@@ -72,15 +72,15 @@ public class LabelServiceImpl implements LabelService {
     @Transactional
     public void deleteLabel(Long labelId) {
         Label label = findLabelOrThrow(labelId);
-        cardLabelRepository.deleteByLabelId(labelId); // Bulk delete (fixed N+1)
+        cardLabelRepository.deleteByLabelId(labelId);
         labelRepository.delete(label);
     }
 
     @Override
     @Transactional
     public void addLabelToCard(CardLabelRequest req, String token) {
-        findLabelOrThrow(req.getLabelId()); // Validate label exists
-        validateCard(req.getCardId(), token); // Validate card exists
+        findLabelOrThrow(req.getLabelId());
+        validateCard(req.getCardId(), token);
         if (cardLabelRepository.existsByCardIdAndLabelId(req.getCardId(), req.getLabelId()))
             throw new BadRequestException("Label already attached to this card");
         CardLabel cl = new CardLabel();

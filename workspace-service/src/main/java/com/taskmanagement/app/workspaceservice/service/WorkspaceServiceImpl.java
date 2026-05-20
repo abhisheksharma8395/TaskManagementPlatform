@@ -135,22 +135,23 @@ public class WorkspaceServiceImpl implements WorkspaceService {
         Workspace workspace = findWorkspaceOrThrow(workspaceId);
         assertIsAdminOrOwner(workspace, requesterId);
 
-        if (memberRepository.existsByWorkspace_WorkspaceIdAndUserId(workspaceId, request.getUserId())) {
-            throw new WorkspaceOperationException("User " + request.getUserId() + " is already a member of this workspace");
-        }
-
-        // Verify that the user actually exists in auth-service
+        UserProfileResponse user;
         try {
-            authServiceClient.getUserById(request.getUserId());
+            user = authServiceClient.getUserByEmail(request.getEmail()).getBody();
         } catch (FeignException.NotFound e) {
-            throw new WorkspaceOperationException("User with id " + request.getUserId() + " does not exist");
+            throw new WorkspaceOperationException("User with email " + request.getEmail() + " does not exist");
         } catch (FeignException e) {
             throw new WorkspaceOperationException("Could not verify user existence: " + e.getMessage());
         }
 
+        if (memberRepository.existsByWorkspace_WorkspaceIdAndUserId(workspaceId, user.getUserId())) {
+            throw new WorkspaceOperationException("User " + user.getEmail() + " is already a member of this workspace");
+        }
+
+
         WorkspaceMember member = new WorkspaceMember();
         member.setWorkspace(workspace);
-        member.setUserId(request.getUserId());
+        member.setUserId(user.getUserId());
         member.setRole(request.getRole() != null ? request.getRole().toUpperCase() : "MEMBER");
 
         return mapToMemberResponse(memberRepository.save(member));
@@ -205,12 +206,7 @@ public class WorkspaceServiceImpl implements WorkspaceService {
                 .orElseThrow(() -> new WorkspaceNotFoundException("Workspace not found with id: " + workspaceId));
     }
 
-    /**
-     * A user can view a workspace if:
-     *  it is PUBLIC, OR
-     *  they are the owner, OR
-     *  they are a member
-     */
+
     private void assertCanView(Workspace workspace, Long requesterId) {
         if ("PUBLIC".equalsIgnoreCase(workspace.getVisibility())) return;
         if (workspace.getOwnerId().equals(requesterId)) return;

@@ -189,10 +189,10 @@ public class CommentServiceImpl implements CommentService {
 
     @Override
     @Transactional
-    public void deleteAttachment(Long attachmentId, Long uploaderId) {
+    public void deleteAttachment(Long attachmentId, Long requesterId) {
         Attachment attachment = attachmentRepository.findById(attachmentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Attachment not found: " + attachmentId));
-        if (!attachment.getUploaderId().equals(uploaderId))
+        if (!attachment.getUploaderId().equals(requesterId))
             throw new AccessDeniedException("You can only delete your own attachments");
         s3Service.deleteFile(attachment.getFileKey());
         attachmentRepository.deleteById(attachmentId);

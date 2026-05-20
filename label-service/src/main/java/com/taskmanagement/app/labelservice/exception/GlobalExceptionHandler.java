@@ -5,9 +5,18 @@ import org.springframework.web.bind.annotation.ExceptionHandler; import org.spri
 import java.time.LocalDateTime; import java.util.HashMap; import java.util.Map;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
-    @ExceptionHandler(ResourceNotFoundException.class) public ResponseEntity<Map<String,Object>> nf(ResourceNotFoundException e){ return b(HttpStatus.NOT_FOUND,e.getMessage()); }
-    @ExceptionHandler(AccessDeniedException.class)     public ResponseEntity<Map<String,Object>> ad(AccessDeniedException e)    { return b(HttpStatus.FORBIDDEN,e.getMessage()); }
-    @ExceptionHandler(BadRequestException.class)       public ResponseEntity<Map<String,Object>> br(BadRequestException e)      { return b(HttpStatus.BAD_REQUEST,e.getMessage()); }
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<Map<String,Object>> nf(ResourceNotFoundException e){
+        return b(HttpStatus.NOT_FOUND,e.getMessage());
+    }
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<Map<String,Object>> ad(AccessDeniedException e)  {
+        return b(HttpStatus.FORBIDDEN,e.getMessage());
+    }
+    @ExceptionHandler(BadRequestException.class)
+    public ResponseEntity<Map<String,Object>> br(BadRequestException e)      {
+        return b(HttpStatus.BAD_REQUEST,e.getMessage());
+    }
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String,Object>> val(MethodArgumentNotValidException ex) {
         Map<String,String> fe=new HashMap<>();

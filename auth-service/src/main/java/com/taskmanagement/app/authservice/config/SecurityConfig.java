@@ -48,7 +48,7 @@ public class SecurityConfig {
                         ).permitAll()
                         .anyRequest().authenticated()
                 )
-                .httpBasic(basic -> basic.disable())    // fixed: disabled — JWT-only API should not use httpBasic
+                .httpBasic(basic -> basic.disable())
                 .formLogin(form -> form.disable())
                 .oauth2Login(oauth -> oauth
                         .successHandler(successHandler)

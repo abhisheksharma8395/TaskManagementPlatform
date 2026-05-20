@@ -64,8 +64,6 @@ public class CardController {
         return ResponseEntity.ok(cardService.updateCard(cardId, req, userId(http)));
     }
 
-    // ── Move / Reorder ────────────────────────────────────────────────────────
-
     @PutMapping("/{cardId}/move")
     @Operation(summary = "Move a card to a different list (drag-and-drop)")
     public ResponseEntity<CardResponse> move(@PathVariable Long cardId, @Valid @RequestBody MoveCardRequest req) {
@@ -78,8 +76,6 @@ public class CardController {
         cardService.reorderCards(listId, req);
         return ResponseEntity.ok("Cards reordered successfully");
     }
-
-    // ── Field-level setters ───────────────────────────────────────────────────
 
     @PutMapping("/{cardId}/assignee")
     @Operation(summary = "Assign or unassign a card (pass null assigneeId to unassign)")
@@ -102,8 +98,6 @@ public class CardController {
         return ResponseEntity.ok(cardService.setStatus(cardId, req));
     }
 
-    // ── Archive / Delete ──────────────────────────────────────────────────────
-
     @PostMapping("/{cardId}/archive")
     @Operation(summary = "Archive a card (soft delete)")
     public ResponseEntity<CardResponse> archive(@PathVariable Long cardId) {
@@ -123,8 +117,6 @@ public class CardController {
         return ResponseEntity.ok("Card permanently deleted");
     }
 
-    // ── Overdue ───────────────────────────────────────────────────────────────
-
     @GetMapping("/overdue")
     @Operation(summary = "Get all overdue cards across the platform (Platform Admin)")
     public ResponseEntity<List<CardResponse>> getAllOverdue() {
@@ -138,10 +130,6 @@ public class CardController {
     }
 
 
-    /**
-     * Extracts userId directly from JWT claims — no auth-service Feign call needed.
-     * The userId claim is embedded in the token at login time by auth-service.
-     */
     private Long userId(HttpServletRequest req) {
         String header = req.getHeader("Authorization");
         if (header == null || !header.startsWith("Bearer "))

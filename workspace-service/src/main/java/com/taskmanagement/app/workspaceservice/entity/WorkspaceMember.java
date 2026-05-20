@@ -28,7 +28,7 @@ public class WorkspaceMember {
     @Column(nullable = false)
     private Long userId;
 
-    // Two Role -> Member and Admin
+    // Two Role -> Member and Admin and Owner also treated as ADMIN
     @Column(nullable = false)
     private String role = "MEMBER";
 

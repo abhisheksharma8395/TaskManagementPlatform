@@ -96,8 +96,8 @@ public class CommentController {
             @PathVariable Long attachmentId,
             HttpServletRequest httpServletRequest) throws IOException {
 
-        Long uploaderId = userId(httpServletRequest);
-        commentService.deleteAttachment(attachmentId, uploaderId);
+        Long requesterId = userId(httpServletRequest);
+        commentService.deleteAttachment(attachmentId, requesterId);
         return ResponseEntity.noContent().build();
     }
 

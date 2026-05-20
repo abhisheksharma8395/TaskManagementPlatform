@@ -29,10 +29,10 @@ public class Attachment {
     @Column(nullable = false)
     private String fileKey;
 
-    /** MIME type e.g. image/png, application/pdf */
+
     private String fileType;
 
-    /** File size in kilobytes */
+    /** File size in Kb */
     private Long sizeKb;
 
     @Column(nullable = false, updatable = false)

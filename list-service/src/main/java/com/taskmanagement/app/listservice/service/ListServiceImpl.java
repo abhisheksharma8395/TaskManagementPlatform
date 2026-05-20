@@ -122,61 +122,6 @@ public class ListServiceImpl implements ListService {
         listRepository.delete(list);
     }
 
-    @Override
-    @Transactional
-    public ListResponse moveList(Long listId, MoveListRequest request) {
-        String token = httpServletRequest.getHeader("Authorization");
-        TaskList list = findOrThrow(listId);
-
-        // 1. Fetch source board to get its workspaceId
-        BoardResponse sourceBoard;
-        try {
-            sourceBoard = boardServiceClient.getBoardById(list.getBoardId(), token).getBody();
-            if (sourceBoard == null) throw new BadRequestException("Source board not found with id: " + list.getBoardId());
-        } catch (FeignException.NotFound e) {
-            throw new BadRequestException("Source board not found with id: " + list.getBoardId());
-        } catch (FeignException e) {
-            throw new BadRequestException("Could not verify source board: " + e.getMessage());
-        }
-
-        // 2. Fetch target board to validate it exists and is not closed
-        BoardResponse targetBoard;
-        try {
-            targetBoard = boardServiceClient.getBoardById(request.getTargetBoardId(), token).getBody();
-            if (targetBoard == null) throw new BadRequestException("Target board not found with id: " + request.getTargetBoardId());
-        } catch (FeignException.NotFound e) {
-            throw new BadRequestException("Target board not found with id: " + request.getTargetBoardId());
-        } catch (FeignException e) {
-            throw new BadRequestException("Could not verify target board: " + e.getMessage());
-        }
-
-        // 3. Enforce same-workspace constraint (case study: "within the same workspace")
-        if (!sourceBoard.getWorkspaceId().equals(targetBoard.getWorkspaceId())) {
-            throw new BadRequestException(
-                    "Cannot move list across workspaces. Source board is in workspace "
-                            + sourceBoard.getWorkspaceId()
-                            + ", target board is in workspace "
-                            + targetBoard.getWorkspaceId()
-            );
-        }
-
-        // 4. Reject move to a closed board
-        if (targetBoard.isClosed()) {
-            throw new BadRequestException("Cannot move a list to a closed board");
-        }
-
-        // 5. Perform the move
-        list.setBoardId(request.getTargetBoardId());
-        if (request.getPosition() != null) {
-            list.setPosition(request.getPosition());
-        } else {
-            int nextPos = listRepository.findMaxPositionByBoardId(request.getTargetBoardId())
-                    .map(m -> m + 1).orElse(0);
-            list.setPosition(nextPos);
-        }
-        return toResponse(listRepository.save(list));
-    }
-
     private TaskList findOrThrow(Long listId) {
         return listRepository.findById(listId).orElseThrow(() -> new ResourceNotFoundException("List not found with id: " + listId));
     }

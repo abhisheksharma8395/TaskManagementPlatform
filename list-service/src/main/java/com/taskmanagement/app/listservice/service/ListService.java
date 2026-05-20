@@ -14,5 +14,4 @@ public interface ListService {
     ListResponse archiveList(Long listId);
     ListResponse unarchiveList(Long listId);
     void deleteList(Long listId);
-    ListResponse moveList(Long listId, MoveListRequest request);
 }

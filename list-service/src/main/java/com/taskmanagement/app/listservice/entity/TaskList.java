@@ -22,7 +22,6 @@ public class TaskList {
     @Column(nullable = false)
     private String name;
 
-    /** Left-to-right display order on the board */
     @Column(nullable = false)
     private Integer position;
 

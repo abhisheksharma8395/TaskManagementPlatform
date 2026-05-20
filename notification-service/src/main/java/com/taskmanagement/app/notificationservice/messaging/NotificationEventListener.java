@@ -39,7 +39,6 @@ public class NotificationEventListener {
 
             log.info("[RabbitMQ] Successfully processed notification for recipientId={}", event.getRecipientId());
         } catch (Exception e) {
-            // Log and don't rethrow — prevents RabbitMQ from requeuing indefinitely
             log.error("[RabbitMQ] Failed to process notification event: {}", e.getMessage(), e);
         }
     }

@@ -77,10 +77,4 @@ public class ListController {
         return ResponseEntity.ok("List permanently deleted");
     }
 
-    @PutMapping("/{listId}/move")
-    @Operation(summary = "Move a list to a different board in the same workspace")
-    public ResponseEntity<ListResponse> move(@PathVariable Long listId,
-                                             @Valid @RequestBody MoveListRequest req) {
-        return ResponseEntity.ok(listService.moveList(listId, req));
-    }
 }

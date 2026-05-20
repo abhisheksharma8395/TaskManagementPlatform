@@ -29,7 +29,6 @@ public class Card {
     @Column(columnDefinition = "TEXT")
     private String description;
 
-    /** Top-to-bottom order within the list */
     @Column(nullable = false)
     private Integer position;
 
