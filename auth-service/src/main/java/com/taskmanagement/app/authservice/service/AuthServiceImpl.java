@@ -128,10 +128,7 @@ public class AuthServiceImpl implements AuthService {
     }
 
 
-    @Override
-    public String refreshToken(String token) {
-        return "";
-    }
+
 
     @Override
     public UserProfileResponse getUserByEmail(String email) {

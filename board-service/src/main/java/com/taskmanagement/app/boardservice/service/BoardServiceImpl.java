@@ -160,6 +160,19 @@ public class BoardServiceImpl implements BoardService {
         if (!memberRepository.existsByBoard_BoardIdAndUserId(boardId, userId))
             throw new BadRequestException("User " + userId + " is not a member of this board");
         memberRepository.deleteByBoard_BoardIdAndUserId(boardId, userId);
+
+        // Publish notification to RabbitMQ
+        NotificationEvent event = new NotificationEvent();
+        event.setRecipientId(userId);
+        event.setRecipientEmail(null);
+        event.setActorId(requesterId);
+        event.setType("BOARD_MEMBER_REMOVED");
+        event.setTitle("You have been removed from a board");
+        event.setMessage("You have been removed from board: " + board.getName());
+        event.setRelatedId(boardId);
+        event.setRelatedType("BOARD");
+        event.setDeepLinkUrl(null);
+        notificationPublisher.publish(event);
     }
 
     @Override

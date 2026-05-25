@@ -7,6 +7,7 @@ import com.taskmanagement.app.workspaceservice.entity.WorkspaceMember;
 import com.taskmanagement.app.workspaceservice.exception.WorkspaceAccessDeniedException;
 import com.taskmanagement.app.workspaceservice.exception.WorkspaceNotFoundException;
 import com.taskmanagement.app.workspaceservice.exception.WorkspaceOperationException;
+import com.taskmanagement.app.workspaceservice.messaging.NotificationPublisher;
 import com.taskmanagement.app.workspaceservice.repository.WorkspaceMemberRepository;
 import com.taskmanagement.app.workspaceservice.repository.WorkspaceRepository;
 import feign.FeignException;
@@ -28,6 +29,9 @@ public class WorkspaceServiceImpl implements WorkspaceService {
 
     @Autowired
     private AuthServiceClient authServiceClient;
+
+    @Autowired
+    private NotificationPublisher notificationPublisher;
 
     @Override
     @Transactional
@@ -135,26 +139,44 @@ public class WorkspaceServiceImpl implements WorkspaceService {
         Workspace workspace = findWorkspaceOrThrow(workspaceId);
         assertIsAdminOrOwner(workspace, requesterId);
 
-        UserProfileResponse user;
+
+        UserProfileResponse recipientUser;
         try {
-            user = authServiceClient.getUserByEmail(request.getEmail()).getBody();
+            recipientUser = authServiceClient.getUserByEmail(request.getEmail()).getBody();
         } catch (FeignException.NotFound e) {
             throw new WorkspaceOperationException("User with email " + request.getEmail() + " does not exist");
         } catch (FeignException e) {
             throw new WorkspaceOperationException("Could not verify user existence: " + e.getMessage());
         }
 
-        if (memberRepository.existsByWorkspace_WorkspaceIdAndUserId(workspaceId, user.getUserId())) {
-            throw new WorkspaceOperationException("User " + user.getEmail() + " is already a member of this workspace");
+        if (memberRepository.existsByWorkspace_WorkspaceIdAndUserId(workspaceId, recipientUser.getUserId())) {
+            throw new WorkspaceOperationException("User " + recipientUser.getEmail() + " is already a member of this workspace");
         }
 
 
         WorkspaceMember member = new WorkspaceMember();
         member.setWorkspace(workspace);
-        member.setUserId(user.getUserId());
+        member.setUserId(recipientUser.getUserId());
         member.setRole(request.getRole() != null ? request.getRole().toUpperCase() : "MEMBER");
 
-        return mapToMemberResponse(memberRepository.save(member));
+        WorkspaceMemberResponse saved = mapToMemberResponse(memberRepository.save(member));
+
+
+        // Notify the newly assigned user — publish to RabbitMQ
+        NotificationEvent event = new NotificationEvent();
+        event.setRecipientId(recipientUser.getUserId());
+        event.setRecipientEmail(recipientUser.getEmail());
+        event.setActorId(requesterId);
+        event.setType("WORKSPACE_MEMBER_ADDED");
+        event.setTitle("You have been added to a workspace");
+        event.setMessage("You have been added to workspace : " + workspace.getName());
+        event.setRelatedId(workspaceId);
+        event.setRelatedType("WORKSPACES");
+        event.setDeepLinkUrl("/workspaces/" + workspace.getWorkspaceId());
+        notificationPublisher.publish(event);
+
+        return saved;
+
     }
 
     @Override
@@ -166,10 +188,23 @@ public class WorkspaceServiceImpl implements WorkspaceService {
         if (workspace.getOwnerId().equals(userId)) {
             throw new WorkspaceOperationException("Cannot remove the workspace owner from the workspace");
         }
+
         if (!memberRepository.existsByWorkspace_WorkspaceIdAndUserId(workspaceId, userId)) {
             throw new WorkspaceOperationException("User " + userId + " is not a member of this workspace");
         }
         memberRepository.deleteByWorkspace_WorkspaceIdAndUserId(workspaceId, userId);
+
+        NotificationEvent event = new NotificationEvent();
+        event.setRecipientId(userId);
+        event.setRecipientEmail(null);
+        event.setActorId(requesterId);
+        event.setType("WORKSPACE_MEMBER_REMOVED");
+        event.setTitle("You have been removed from a workspace");
+        event.setMessage("You have been removed from workspace: " + workspace.getName());
+        event.setRelatedId(workspaceId);
+        event.setRelatedType("WORKSPACE");
+        event.setDeepLinkUrl(null);                // no link — they no longer have access
+        notificationPublisher.publish(event);
     }
 
     @Override
@@ -249,3 +284,4 @@ public class WorkspaceServiceImpl implements WorkspaceService {
         return response;
     }
 }
+

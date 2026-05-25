@@ -18,7 +18,6 @@ public interface AuthService {
     boolean validatingUserRegister(RegisterRequest request) throws InvalidUserRegisterException;
     AuthResponse login(String username, String password);
     void logout(String username);
-    String refreshToken(String token);
     UserProfileResponse getUserByEmail(String email);
     UserProfileResponse getUserById(Long id);
     UserProfileResponse updateProfile(Long id, RegisterRequest request);

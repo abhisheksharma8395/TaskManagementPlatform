@@ -6,22 +6,29 @@ import com.taskmanagement.app.commentservice.entity.Comment;
 import com.taskmanagement.app.commentservice.exception.AccessDeniedException;
 import com.taskmanagement.app.commentservice.exception.BadRequestException;
 import com.taskmanagement.app.commentservice.exception.ResourceNotFoundException;
+import com.taskmanagement.app.commentservice.feign.AuthServiceClient;
 import com.taskmanagement.app.commentservice.feign.CardServiceClient;
 import com.taskmanagement.app.commentservice.messaging.NotificationPublisher;
 import com.taskmanagement.app.commentservice.repository.AttachmentRepository;
 import com.taskmanagement.app.commentservice.repository.CommentRepository;
 import feign.FeignException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 public class CommentServiceImpl implements CommentService {
 
     @Autowired private CommentRepository commentRepository;
@@ -29,6 +36,7 @@ public class CommentServiceImpl implements CommentService {
     @Autowired private CardServiceClient cardServiceClient;
     @Autowired private NotificationPublisher notificationPublisher;
     @Autowired private S3Service s3Service;
+    @Autowired private AuthServiceClient authServiceClient;
 
     private static final List<String> ALLOWED_TYPES = List.of(
             "image/jpeg", "image/png", "image/gif",
@@ -62,27 +70,7 @@ public class CommentServiceImpl implements CommentService {
         comment.setParentCommentId(request.getParentCommentId());
         Comment saved = commentRepository.save(comment);
 
-        // Publish notification to RabbitMQ — notify the card assignee
-        if (card.getAssigneeId() != null && !card.getAssigneeId().equals(authorId)) {
-            boolean isMention = request.getContent() != null
-                    && request.getContent().matches(".*@\\S+.*");
-
-            String truncatedContent = request.getContent() != null && request.getContent().length() > 100
-                    ? request.getContent().substring(0, 100) + "..."
-                    : request.getContent();
-
-            NotificationEvent event = new NotificationEvent();
-            event.setRecipientId(card.getAssigneeId());
-            event.setRecipientEmail(null); // COMMENT/MENTION — in-app only, no email
-            event.setActorId(authorId);
-            event.setType(isMention ? "MENTION" : "COMMENT");
-            event.setTitle(isMention ? "You were mentioned in a comment" : "New comment on your card");
-            event.setMessage(truncatedContent);
-            event.setRelatedId(request.getCardId());
-            event.setRelatedType("CARD");
-            event.setDeepLinkUrl("/cards/" + request.getCardId());
-            notificationPublisher.publish(event);
-        }
+        sendNotification(card,saved.getContent(),authorId);
 
         return toResponse(saved, false);
     }
@@ -213,6 +201,76 @@ public class CommentServiceImpl implements CommentService {
     private Comment findCommentOrThrow(Long commentId) {
         return commentRepository.findById(commentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Comment not found: " + commentId));
+    }
+
+    private void sendNotification(CardResponse card, String commentContent, Long authorId) {
+
+        // 1. Notify the card assignee (if exists and is not the author)
+        if (card.getAssigneeId() != null && !card.getAssigneeId().equals(authorId)) {
+            String truncatedContent = truncate(commentContent);
+
+            NotificationEvent event = new NotificationEvent();
+            event.setRecipientId(card.getAssigneeId());
+            event.setRecipientEmail(null);
+            event.setActorId(authorId);
+            event.setType("COMMENT");
+            event.setTitle("New comment on your card");
+            event.setMessage(truncatedContent);
+            event.setRelatedId(card.getCardId());
+            event.setRelatedType("CARD");
+            event.setDeepLinkUrl("/cards/" + card.getCardId());
+            notificationPublisher.publish(event);
+        }
+
+        // 2. Notifying every mentioned user separately
+        List<String> mentionedUsernames = extractMentions(commentContent);
+        for (String username : mentionedUsernames) {
+            try {
+                UserProfileResponse mentionedUser = authServiceClient.getUserByUsername(username).getBody();
+
+                if (mentionedUser == null) continue;
+
+                // skipping if mentioned user is the author
+                if (mentionedUser.getUserId().equals(authorId)) continue;
+
+
+                NotificationEvent mentionEvent = new NotificationEvent();
+                mentionEvent.setRecipientId(mentionedUser.getUserId());
+                mentionEvent.setRecipientEmail(null);
+                mentionEvent.setActorId(authorId);
+                mentionEvent.setType("MENTION");
+                mentionEvent.setTitle("You were mentioned in a comment");
+                mentionEvent.setMessage("You were mentioned in a comment on card: "
+                        + card.getTitle() + " — " + truncate(commentContent));
+                mentionEvent.setRelatedId(card.getCardId());
+                mentionEvent.setRelatedType("CARD");
+                mentionEvent.setDeepLinkUrl("/cards/" + card.getCardId());
+                notificationPublisher.publish(mentionEvent);
+
+            } catch (FeignException.NotFound e) {
+                // username does not exist — skip silently
+                log.warn("Mentioned username '{}' not found in auth service", username);
+            } catch (FeignException e) {
+                // auth service down — log and continue, don't break the comment flow
+                log.error("Failed to resolve mentioned username '{}': {}", username, e.getMessage());
+            }
+        }
+    }
+
+
+    private List<String> extractMentions(String content) {
+        if (content == null || content.isBlank()) return List.of();
+        Matcher matcher = Pattern.compile("@(\\w+)").matcher(content);
+        List<String> mentions = new ArrayList<>();
+        while (matcher.find()) {
+            mentions.add(matcher.group(1));
+        }
+        return mentions;
+    }
+
+    private String truncate(String content) {
+        if (content == null) return "";
+        return content.length() > 100 ? content.substring(0, 100) + "..." : content;
     }
 
     private CommentResponse toResponse(Comment c, boolean loadReplies) {
